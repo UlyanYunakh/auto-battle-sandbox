@@ -1,0 +1,4 @@
+root = true
+
+[*.{h,hpp,cpp,cxx}]
+resharper_cpp_redundant_access_specifier_highlighting = none

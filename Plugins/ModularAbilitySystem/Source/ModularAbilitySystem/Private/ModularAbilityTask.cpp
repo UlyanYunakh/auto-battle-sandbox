@@ -63,6 +63,11 @@ bool UModularAbilityTask::ActivateModularAbilityTask()
 	return true;
 }
 
+bool UModularAbilityTask::CanActivateTask() const
+{
+	return true;
+}
+
 void UModularAbilityTask::OnOwningAbilityFrozen()
 {
 	

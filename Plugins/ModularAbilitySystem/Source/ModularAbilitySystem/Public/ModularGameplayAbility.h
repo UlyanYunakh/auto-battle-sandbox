@@ -39,6 +39,10 @@ enum class EModularGameplayAbilityContinuation : uint8
 	CommitAfterPreActivationEvent
 };
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAbilityFrozen);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAbilityResumed, const FModularGameplayAbilityContext&, AbilityContext);
+
 /**
  * Base class for modular gameplay ability
  */
@@ -111,11 +115,9 @@ public:
 	bool TryUpdateAbilityContext(const FModularGameplayAbilityContext& NewAbilityContext);
 	
 public:
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAbilityFrozen);
 	UPROPERTY(BlueprintAssignable)
 	FOnAbilityFrozen OnModularAbilityFrozen;
 	
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAbilityResumed, const FModularGameplayAbilityContext&, AbilityContext);
 	UPROPERTY(BlueprintAssignable)
 	FOnAbilityResumed OnModularAbilityResumed;
 

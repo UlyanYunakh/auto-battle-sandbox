@@ -23,7 +23,6 @@ public:
 		FModularGameplayAbilityContext& AbilityContext);
 
 	// Begin of UAbilityTask override
-	virtual void Activate() override;
 	virtual void OnDestroy(bool bInOwnerFinished) override;
 	//~End of UAbilityTask override
 
@@ -37,8 +36,12 @@ public:
 	FOnModularAbilityTaskComplete OnModularAbilityTaskComplete;
 
 protected:
+	// Begin of UAbilityTask override
+	virtual void Activate() override;
+	//~End of UAbilityTask override
+	
 	virtual bool ActivateModularAbilityTask();
-	virtual bool CanActivateTask() { return false; }
+	virtual bool CanActivateTask() const;
 	
 	UFUNCTION()
 	virtual void OnOwningAbilityFrozen();
