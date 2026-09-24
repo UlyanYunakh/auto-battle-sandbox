@@ -1,0 +1,89 @@
+# User-specific files
+*.suo
+*.user
+*.sln
+*.sln.docstates
+*.code-workspace
+*.vsconfig
+
+# IDEs
+.vs/*
+.vscode/*
+.idea/*
+
+# Caches
+_ReSharper.Caches/*
+
+# Ignore DDC
+DerivedDataCache/*
+
+# Ignore Content folders
+Content/Collections/*
+Content/Developers/*
+
+# Ignore intermediate folders
+Intermediate/*
+Plugins/*/Intermediate/*
+Plugins/Developer/*/Intermediate/*
+
+# Builds and Saved
+ArchivedBuilds/*
+Build/*
+Saved/*
+
+# Don't ignore icon files in Build
+!Build/*/*.ico
+
+# Binaries
+Binaries/*
+Plugins/*/Binaries/*
+
+# Ignoring the Rider plugin
+Plugins/Developer/RiderLink/*
+
+# Plugins Binaries
+
+# Live Coding Plugins Binaries
+
+# Visual Studio profiler
+*.psess
+*.vsp
+*.vspx
+
+# Visual C++ cache files
+*.aps
+*.ncb
+*.opensdf
+*.sdf
+*.cachefile
+
+# Xcode
+*.xcworkspace
+
+# Other
+*.pyc
+*_i.c
+*_p.c
+*.ilk
+*.meta
+*.obj
+*.pch
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*.log
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.log
+*.scc
+
+# Annoying windows files
+[Dd]esktop.ini

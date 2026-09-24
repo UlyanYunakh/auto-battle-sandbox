@@ -1,7 +1,7 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "AbilitySystem/BattleAbilitySystem.h"
+#include "AbilitySystem/Components/BattleAbilitySystem.h"
 
 
 // Sets default values for this component's properties
@@ -26,7 +26,7 @@ void UBattleAbilitySystem::BeginPlay()
 
 // Called every frame
 void UBattleAbilitySystem::TickComponent(float DeltaTime, ELevelTick TickType,
-                                       FActorComponentTickFunction* ThisTickFunction)
+                                         FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 

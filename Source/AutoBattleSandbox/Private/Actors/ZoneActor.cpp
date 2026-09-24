@@ -3,7 +3,7 @@
 
 #include "Actors/ZoneActor.h"
 
-#include "AbilitySystem/BattleAbilitySystem.h"
+#include "AbilitySystem/Components/BattleAbilitySystem.h"
 #include "Actors/UnitActor.h"
 #include "Components/BoxComponent.h"
 

@@ -3,7 +3,7 @@
 
 #include "Actors/UnitActor.h"
 
-#include "AbilitySystem/BattleAbilitySystem.h"
+#include "AbilitySystem/Components/BattleAbilitySystem.h"
 
 
 AUnitActor::AUnitActor()
