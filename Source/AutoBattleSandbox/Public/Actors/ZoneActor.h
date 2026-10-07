@@ -8,6 +8,7 @@
 
 class UBattleAbilitySystem;
 class UBoxComponent;
+class UChildActorComponent;
 class AZoneActor;
 class AUnitActor;
 
@@ -55,9 +56,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Zone")
 	bool HasFreeSlot() const;
 
+	UFUNCTION(BlueprintPure, Category = "Zone|Layout")
+	int32 GetSlotIndexAtWorldLocation(FVector WorldLocation) const;
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+
+#if WITH_EDITOR
+	virtual void OnConstruction(const FTransform& Transform) override;
+#endif
 
 protected:
 	void RefreshUnitLayout(bool bAnimate);
@@ -65,6 +73,11 @@ protected:
 	void MoveActorToTransform(AActor* Actor, const FTransform& TargetTransform, bool bAnimate);
 	void UpdateLayoutAnimations(float DeltaTime);
 	int32 FindAnimationIndexForActor(const AActor* Actor) const;
+
+#if WITH_EDITOR
+	void RefreshEditorPreview();
+	void ClearEditorPreview();
+#endif
 
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zone|Components", meta = (AllowPrivateAccess = "true"))
@@ -85,6 +98,18 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zone|Layout")
 	bool bCenterUnits = true;
+
+#if WITH_EDITORONLY_DATA
+	UPROPERTY(EditAnywhere, Category = "Zone|Layout|Editor Preview")
+	bool bPreviewActorsInEditor = false;
+
+	UPROPERTY(EditAnywhere, Category = "Zone|Layout|Editor Preview",
+		meta = (EditCondition = "bPreviewActorsInEditor", EditConditionHides))
+	TSubclassOf<AUnitActor> EditorPreviewActorClass;
+
+	UPROPERTY(Transient, TextExportTransient, NonPIEDuplicateTransient)
+	TArray<TObjectPtr<UChildActorComponent>> EditorPreviewComponents;
+#endif
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zone|Animation")
 	bool bAnimateLayoutChanges = true;

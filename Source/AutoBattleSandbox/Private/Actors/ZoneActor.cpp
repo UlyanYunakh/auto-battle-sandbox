@@ -5,7 +5,11 @@
 
 #include "AbilitySystem/Components/BattleAbilitySystem.h"
 #include "Actors/UnitActor.h"
+#include "Collision/AutoBattleCollisionChannels.h"
 #include "Components/BoxComponent.h"
+#if WITH_EDITOR
+#include "Components/ChildActorComponent.h"
+#endif
 
 // Sets default values
 AZoneActor::AZoneActor()
@@ -14,6 +18,7 @@ AZoneActor::AZoneActor()
 	PrimaryActorTick.bCanEverTick = true;
 
 	BoxComponent = CreateDefaultSubobject<UBoxComponent>(TEXT("BoxComponent"));
+	BoxComponent->SetCollisionResponseToChannel(ECC_Zone, ECR_Block);
 	SetRootComponent(BoxComponent);
 
 	BattleAbilityComponent = CreateDefaultSubobject<UBattleAbilitySystem>(TEXT("BattleAbilityComponent"));
@@ -24,6 +29,15 @@ void AZoneActor::BeginPlay()
 {
 	Super::BeginPlay();
 }
+
+#if WITH_EDITOR
+void AZoneActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	RefreshEditorPreview();
+}
+#endif
 
 // Called every frame
 void AZoneActor::Tick(float DeltaTime)
@@ -110,10 +124,16 @@ bool AZoneActor::SetPreviewUnit(AUnitActor* UnitActor, int32 SlotIndex)
 	}
 
 	const int32 LastPreviewSlotIndex = UnitActors.Num();
+	const int32 NewPreviewSlotIndex = SlotIndex == INDEX_NONE
+		                                  ? LastPreviewSlotIndex
+		                                  : FMath::Clamp(SlotIndex, 0, LastPreviewSlotIndex);
+	if (PreviewActor == UnitActor && PreviewSlotIndex == NewPreviewSlotIndex)
+	{
+		return true;
+	}
+
 	PreviewActor = UnitActor;
-	PreviewSlotIndex = SlotIndex == INDEX_NONE
-		                   ? LastPreviewSlotIndex
-		                   : FMath::Clamp(SlotIndex, 0, LastPreviewSlotIndex);
+	PreviewSlotIndex = NewPreviewSlotIndex;
 
 	OnPreviewUnitChanged.Broadcast(this, PreviewActor, PreviewSlotIndex);
 	RefreshUnitLayout(bAnimateLayoutChanges);
@@ -145,16 +165,20 @@ void AZoneActor::ClearPreviewUnit()
 bool AZoneActor::CommitPreviewUnit()
 {
 	AUnitActor* UnitActor = PreviewActor;
-	if (!IsValid(UnitActor))
+	if (!IsValid(UnitActor) || ContainsUnit(UnitActor) || !HasFreeSlot())
 	{
 		return false;
 	}
 
+	const int32 SlotIndex = FMath::Clamp(PreviewSlotIndex, 0, UnitActors.Num());
 	PreviewActor = nullptr;
 	PreviewSlotIndex = INDEX_NONE;
 	OnPreviewUnitChanged.Broadcast(this, nullptr, INDEX_NONE);
 
-	return AddUnit(UnitActor);
+	UnitActors.Insert(UnitActor, SlotIndex);
+	OnUnitAdded.Broadcast(this, UnitActor);
+	RefreshUnitLayout(bAnimateLayoutChanges);
+	return true;
 }
 
 int32 AZoneActor::GetUnitCount() const
@@ -165,6 +189,27 @@ int32 AZoneActor::GetUnitCount() const
 bool AZoneActor::HasFreeSlot() const
 {
 	return MaxUnitCount <= 0 || UnitActors.Num() < MaxUnitCount;
+}
+
+int32 AZoneActor::GetSlotIndexAtWorldLocation(FVector WorldLocation) const
+{
+	if (!HasFreeSlot())
+	{
+		return INDEX_NONE;
+	}
+
+	const int32 TotalSlots = UnitActors.Num() + 1;
+	if (FMath::IsNearlyZero(SpaceBetweenUnits))
+	{
+		return 0;
+	}
+
+	const float StartOffset = bCenterUnits
+		                          ? -static_cast<float>(TotalSlots - 1) * SpaceBetweenUnits * 0.5f
+		                          : 0.0f;
+	const float LocalPosition = GetActorTransform().InverseTransformPosition(WorldLocation).X - LocalLayoutOffset.X;
+	const int32 SlotIndex = FMath::RoundToInt((LocalPosition - StartOffset) / SpaceBetweenUnits);
+	return FMath::Clamp(SlotIndex, 0, TotalSlots - 1);
 }
 
 void AZoneActor::RefreshUnitLayout(bool bAnimate)
@@ -201,7 +246,7 @@ FTransform AZoneActor::GetSlotTransform(int32 SlotIndex, int32 TotalSlots) const
 		                          ? -static_cast<float>(ClampedTotalSlots - 1) * SpaceBetweenUnits * 0.5f
 		                          : 0.0f;
 	const FVector LocalLocation = LocalLayoutOffset + FVector(
-		0.0f, StartOffset + static_cast<float>(SlotIndex) * SpaceBetweenUnits, 0.0f);
+		StartOffset + static_cast<float>(SlotIndex) * SpaceBetweenUnits, 0.0f, 0.0f);
 
 	return FTransform(GetActorRotation(), GetActorTransform().TransformPosition(LocalLocation), FVector::OneVector);
 }
@@ -293,3 +338,70 @@ int32 AZoneActor::FindAnimationIndexForActor(const AActor* Actor) const
 
 	return INDEX_NONE;
 }
+
+#if WITH_EDITOR
+void AZoneActor::RefreshEditorPreview()
+{
+	const UWorld* World = GetWorld();
+	const int32 PreviewActorCount = World && !World->IsGameWorld() && bPreviewActorsInEditor && EditorPreviewActorClass
+		                                ? FMath::Max(MaxUnitCount, 0)
+		                                : 0;
+	EditorPreviewComponents.RemoveAllSwap([](const TObjectPtr<UChildActorComponent>& PreviewComponent)
+	{
+		return !IsValid(PreviewComponent);
+	});
+
+	if (PreviewActorCount == 0)
+	{
+		ClearEditorPreview();
+		return;
+	}
+
+	while (EditorPreviewComponents.Num() > PreviewActorCount)
+	{
+		if (UChildActorComponent* PreviewComponent = EditorPreviewComponents.Pop())
+		{
+			PreviewComponent->DestroyComponent();
+		}
+	}
+
+	while (EditorPreviewComponents.Num() < PreviewActorCount)
+	{
+		const FName ComponentName = MakeUniqueObjectName(this, UChildActorComponent::StaticClass(),
+		                                                 TEXT("EditorPreviewActor"));
+		UChildActorComponent* PreviewComponent = NewObject<UChildActorComponent>(
+			this, ComponentName, RF_Transactional | RF_Transient);
+		PreviewComponent->SetIsVisualizationComponent(true);
+		PreviewComponent->SetupAttachment(GetRootComponent());
+		PreviewComponent->SetChildActorClass(EditorPreviewActorClass);
+		AddInstanceComponent(PreviewComponent);
+		PreviewComponent->RegisterComponent();
+		EditorPreviewComponents.Add(PreviewComponent);
+	}
+
+	for (int32 Index = 0; Index < EditorPreviewComponents.Num(); ++Index)
+	{
+		UChildActorComponent* PreviewComponent = EditorPreviewComponents[Index];
+		if (!IsValid(PreviewComponent))
+		{
+			continue;
+		}
+
+		PreviewComponent->SetChildActorClass(EditorPreviewActorClass);
+		PreviewComponent->SetWorldTransform(GetSlotTransform(Index, PreviewActorCount));
+	}
+}
+
+void AZoneActor::ClearEditorPreview()
+{
+	for (UChildActorComponent* PreviewComponent : EditorPreviewComponents)
+	{
+		if (IsValid(PreviewComponent))
+		{
+			PreviewComponent->DestroyComponent();
+		}
+	}
+
+	EditorPreviewComponents.Reset();
+}
+#endif

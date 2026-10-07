@@ -19,7 +19,9 @@ AUnitActor* UUnitBlueprintLibrary::SpawnAndInitializeUnitActor(
 		return nullptr;
 	}
 
-	UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	UWorld* World = GEngine
+		                ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull)
+		                : nullptr;
 	if (!World)
 	{
 		return nullptr;
@@ -37,8 +39,8 @@ AUnitActor* UUnitBlueprintLibrary::SpawnAndInitializeUnitActor(
 		return nullptr;
 	}
 
-	UnitActor->InitializeUnit(UnitDataAsset);
 	UnitActor->FinishSpawning(Transform);
+	UnitActor->InitializeUnit(UnitDataAsset);
 
 	return UnitActor;
 }
