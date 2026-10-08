@@ -20,6 +20,7 @@ namespace
 void UUnitViewModel::SetUnitActor(AUnitActor* InUnitActor)
 {
 	UnbindAttributeChangeDelegates();
+	UnbindUnitInitializedDelegate();
 
 	UnitActor = InUnitActor;
 
@@ -29,6 +30,7 @@ void UUnitViewModel::SetUnitActor(AUnitActor* InUnitActor)
 		return;
 	}
 
+	BindUnitInitializedDelegate();
 	RefreshFromUnitActor();
 	BindAttributeChangeDelegates();
 }
@@ -36,6 +38,7 @@ void UUnitViewModel::SetUnitActor(AUnitActor* InUnitActor)
 void UUnitViewModel::InitializeFromAsset(const UUnitAsset* InUnitAsset)
 {
 	UnbindAttributeChangeDelegates();
+	UnbindUnitInitializedDelegate();
 	UnitActor = nullptr;
 
 	if (InUnitAsset == nullptr)
@@ -64,6 +67,7 @@ void UUnitViewModel::ViewModelInitialize(AActor* InActor)
 void UUnitViewModel::ViewModelClear()
 {
 	UnbindAttributeChangeDelegates();
+	UnbindUnitInitializedDelegate();
 	UnitActor = nullptr;
 
 	Super::ViewModelClear();
@@ -202,6 +206,27 @@ void UUnitViewModel::HandleAttackChanged(const FOnAttributeChangeData& Data)
 void UUnitViewModel::HandleArmorChanged(const FOnAttributeChangeData& Data)
 {
 	SetArmor(Data.NewValue);
+}
+
+void UUnitViewModel::BindUnitInitializedDelegate()
+{
+	if (UnitActor != nullptr)
+	{
+		UnitActor->OnInitialized.AddUniqueDynamic(this, &ThisClass::HandleUnitInitialized);
+	}
+}
+
+void UUnitViewModel::UnbindUnitInitializedDelegate()
+{
+	if (UnitActor != nullptr)
+	{
+		UnitActor->OnInitialized.RemoveDynamic(this, &ThisClass::HandleUnitInitialized);
+	}
+}
+
+void UUnitViewModel::HandleUnitInitialized()
+{
+	RefreshFromUnitActor();
 }
 
 void UUnitViewModel::ClearUnit()

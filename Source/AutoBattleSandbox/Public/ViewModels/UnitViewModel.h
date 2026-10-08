@@ -82,6 +82,12 @@ private:
 	void HandleHealthChanged(const FOnAttributeChangeData& Data);
 	void HandleAttackChanged(const FOnAttributeChangeData& Data);
 	void HandleArmorChanged(const FOnAttributeChangeData& Data);
+	void BindUnitInitializedDelegate();
+	void UnbindUnitInitializedDelegate();
+
+	UFUNCTION()
+	void HandleUnitInitialized();
+
 	void ClearUnit();
 
 private:

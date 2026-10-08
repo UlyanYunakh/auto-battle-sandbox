@@ -43,7 +43,7 @@ void UUnitDragDropOperation::DragCancelled_Implementation(const FPointerEvent& P
 	Super::DragCancelled_Implementation(PointerEvent);
 }
 
-APlayerController* UUnitDragDropOperation::ResolvePlayerController() const
+APlayerController* UUnitDragDropOperation::ResolvePlayerController_Implementation() const
 {
 	if (IsValid(PlayerController))
 	{
@@ -54,7 +54,7 @@ APlayerController* UUnitDragDropOperation::ResolvePlayerController() const
 	return World ? World->GetFirstPlayerController() : nullptr;
 }
 
-const UUnitAsset* UUnitDragDropOperation::ResolveUnitDataAsset() const
+const UUnitAsset* UUnitDragDropOperation::ResolveUnitDataAsset_Implementation() const
 {
 	return UnitDataAsset ? UnitDataAsset.Get() : Cast<UUnitAsset>(Payload);
 }

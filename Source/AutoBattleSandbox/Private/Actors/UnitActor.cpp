@@ -47,6 +47,8 @@ void AUnitActor::InitializeUnit(const UUnitAsset* UnitDataAsset)
 	                                           UnitDataAsset->Armor);
 	UnitAbilitySystem->SetNumericAttributeBase(UDefensiveAttributeSet::GetArmorAttribute(), UnitDataAsset->Armor);
 	UnitAbilitySystem->SetNumericAttributeBase(UOffensiveAttributeSet::GetAttackAttribute(), UnitDataAsset->Attack);
+
+	OnInitialized.Broadcast();
 }
 
 UBattleAbilitySystem* AUnitActor::GetUnitAbilitySystem() const

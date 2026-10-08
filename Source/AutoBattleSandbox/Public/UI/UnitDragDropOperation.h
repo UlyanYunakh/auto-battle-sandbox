@@ -34,9 +34,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Unit Drag and Drop", meta = (ExposeOnSpawn = "true"))
 	TObjectPtr<APlayerController> PlayerController = nullptr;
 
-private:
+protected:
+	UFUNCTION(BlueprintNativeEvent, Category = "Unit Drag and Drop")
 	APlayerController* ResolvePlayerController() const;
+	virtual APlayerController* ResolvePlayerController_Implementation() const;
+
+	UFUNCTION(BlueprintNativeEvent, Category = "Unit Drag and Drop")
 	const UUnitAsset* ResolveUnitDataAsset() const;
+	virtual const UUnitAsset* ResolveUnitDataAsset_Implementation() const;
+
+private:
 	bool UpdateHoveredZone(const FPointerEvent& PointerEvent);
 	bool CommitAtPointer(const FPointerEvent& PointerEvent);
 	void ClearHoveredZone();

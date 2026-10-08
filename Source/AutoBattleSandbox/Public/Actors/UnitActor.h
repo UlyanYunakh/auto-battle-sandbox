@@ -12,6 +12,8 @@ class UOffensiveAttributeSet;
 class UTexture2D;
 class UUnitAsset;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUnitInitialized);
+
 UCLASS()
 class AUTOBATTLESANDBOX_API AUnitActor : public AActor
 {
@@ -33,6 +35,10 @@ public:
 	TSoftObjectPtr<UTexture2D> GetUnitArt() const;
 
 	virtual void Tick(float DeltaTime) override;
+
+public:
+	UPROPERTY(BlueprintAssignable, Category = "Unit")
+	FOnUnitInitialized OnInitialized;
 
 protected:
 	virtual void BeginPlay() override;
