@@ -6,6 +6,8 @@
 #include "GameFramework/PlayerController.h"
 #include "AutoBattleSandboxPlayerController.generated.h"
 
+class UBattleTargetSelectionComponent;
+
 /**
  * Player controller for UI-driven auto battle interactions.
  */
@@ -17,6 +19,15 @@ class AUTOBATTLESANDBOX_API AAutoBattleSandboxPlayerController : public APlayerC
 public:
 	AAutoBattleSandboxPlayerController();
 
+	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
+
+	UFUNCTION(BlueprintPure, Category = "Ability Targeting")
+	UBattleTargetSelectionComponent* GetTargetSelectionComponent() const { return TargetSelectionComponent; }
+
 protected:
 	virtual void BeginPlay() override;
+
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ability Targeting")
+	TObjectPtr<UBattleTargetSelectionComponent> TargetSelectionComponent = nullptr;
 };

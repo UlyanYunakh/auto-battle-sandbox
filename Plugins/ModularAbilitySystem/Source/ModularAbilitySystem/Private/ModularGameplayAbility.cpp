@@ -7,6 +7,21 @@
 #include "GameplayAbilitySpec.h"
 #include "ModularAbilityTask.h"
 
+void UModularGameplayAbility::PostLoad()
+{
+	Super::PostLoad();
+	MigrateDeprecatedTaskDefinitions();
+	SynchronizeTaskDefinitions();
+}
+
+#if WITH_EDITOR
+void UModularGameplayAbility::PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeChainProperty(PropertyChangedEvent);
+	SynchronizeTaskDefinitions();
+}
+#endif
+
 bool UModularGameplayAbility::FreezeAbility()
 {
 	// Runtime state must never be stored on a non-instanced ability's CDO.
@@ -16,10 +31,10 @@ bool UModularGameplayAbility::FreezeAbility()
 	}
 
 	AbilityState = EModularGameplayAbilityState::Frozen;
-	
+
 	OnAbilityFrozen();
 	OnModularAbilityFrozen.Broadcast();
-	
+
 	return true;
 }
 
@@ -31,11 +46,11 @@ bool UModularGameplayAbility::ResumeAbility()
 	}
 
 	AbilityState = EModularGameplayAbilityState::Active;
-	
+
 	OnAbilityResumed();
 	OnModularAbilityResumed.Broadcast(AbilityContext);
 	ContinuePendingActivation();
-	
+
 	return true;
 }
 
@@ -204,13 +219,14 @@ void UModularGameplayAbility::HandleModularAbilityTaskComplete(FModularGameplayA
 
 void UModularGameplayAbility::HandleModularAbilityTaskCanceled()
 {
+	ClearActiveTask();
 	CancelAbilityActivation();
 }
 
 void UModularGameplayAbility::StartPreActivationTasks()
 {
 	bRunningPreActivationTasks = true;
-	StartTaskList(PreActivationAbilityTasks);
+	StartTaskList(PreActivationAbilityTaskDefinitions);
 }
 
 void UModularGameplayAbility::FinishPreActivationTasks()
@@ -274,7 +290,7 @@ void UModularGameplayAbility::ContinuePendingActivation()
 
 void UModularGameplayAbility::StartActivationTasks()
 {
-	StartTaskList(ActivationAbilityTasks);
+	StartTaskList(ActivationAbilityTaskDefinitions);
 }
 
 void UModularGameplayAbility::FinishActivationTasks()
@@ -293,7 +309,7 @@ void UModularGameplayAbility::FinishActivationTasks()
 	}
 }
 
-void UModularGameplayAbility::StartTaskList(const TArray<TSubclassOf<UModularAbilityTask>>& AbilityTasks)
+void UModularGameplayAbility::StartTaskList(const TArray<FModularAbilityTaskDefinition>& AbilityTasks)
 {
 	ClearActiveTask(true);
 	ActiveAbilityTaskList = &AbilityTasks;
@@ -324,7 +340,7 @@ bool UModularGameplayAbility::StartNextTask()
 		return false;
 	}
 
-	UModularAbilityTask* NewTask = UModularAbilityTask::CreateModularAbilityTask(
+	UModularAbilityTask* NewTask = UModularAbilityTask::CreateConfiguredModularAbilityTask(
 		(*ActiveAbilityTaskList)[ActiveAbilityTaskIndex],
 		this,
 		AbilityContext);
@@ -335,8 +351,10 @@ bool UModularGameplayAbility::StartNextTask()
 	}
 
 	ActiveModularAbilityTask = NewTask;
-	ActiveModularAbilityTask->OnModularAbilityTaskComplete.AddDynamic(this, &ThisClass::HandleModularAbilityTaskComplete);
-	ActiveModularAbilityTask->OnModularAbilityTaskCanceled.AddDynamic(this, &ThisClass::HandleModularAbilityTaskCanceled);
+	ActiveModularAbilityTask->OnModularAbilityTaskComplete.AddDynamic(
+		this, &ThisClass::HandleModularAbilityTaskComplete);
+	ActiveModularAbilityTask->OnModularAbilityTaskCanceled.AddDynamic(
+		this, &ThisClass::HandleModularAbilityTaskCanceled);
 	ActiveModularAbilityTask->ReadyForActivation();
 
 	return true;
@@ -349,8 +367,10 @@ void UModularGameplayAbility::ClearActiveTask(const bool bEndTask)
 		return;
 	}
 
-	ActiveModularAbilityTask->OnModularAbilityTaskComplete.RemoveDynamic(this, &ThisClass::HandleModularAbilityTaskComplete);
-	ActiveModularAbilityTask->OnModularAbilityTaskCanceled.RemoveDynamic(this, &ThisClass::HandleModularAbilityTaskCanceled);
+	ActiveModularAbilityTask->OnModularAbilityTaskComplete.RemoveDynamic(
+		this, &ThisClass::HandleModularAbilityTaskComplete);
+	ActiveModularAbilityTask->OnModularAbilityTaskCanceled.RemoveDynamic(
+		this, &ThisClass::HandleModularAbilityTaskCanceled);
 
 	if (bEndTask)
 	{
@@ -358,6 +378,47 @@ void UModularGameplayAbility::ClearActiveTask(const bool bEndTask)
 	}
 
 	ActiveModularAbilityTask = nullptr;
+}
+
+void UModularGameplayAbility::SynchronizeTaskDefinitions()
+{
+	for (FModularAbilityTaskDefinition& TaskDefinition : PreActivationAbilityTaskDefinitions)
+	{
+		TaskDefinition.SynchronizeParameters();
+	}
+
+	for (FModularAbilityTaskDefinition& TaskDefinition : ActivationAbilityTaskDefinitions)
+	{
+		TaskDefinition.SynchronizeParameters();
+	}
+}
+
+void UModularGameplayAbility::MigrateDeprecatedTaskDefinitions()
+{
+	if (PreActivationAbilityTaskDefinitions.IsEmpty() && !PreActivationAbilityTasks.IsEmpty())
+	{
+		PreActivationAbilityTaskDefinitions.Reserve(PreActivationAbilityTasks.Num());
+		for (const TSubclassOf<UModularAbilityTask> TaskClass : PreActivationAbilityTasks)
+		{
+			FModularAbilityTaskDefinition& TaskDefinition = PreActivationAbilityTaskDefinitions.AddDefaulted_GetRef();
+			TaskDefinition.TaskClass = TaskClass;
+			TaskDefinition.SynchronizeParameters();
+		}
+	}
+
+	if (ActivationAbilityTaskDefinitions.IsEmpty() && !ActivationAbilityTasks.IsEmpty())
+	{
+		ActivationAbilityTaskDefinitions.Reserve(ActivationAbilityTasks.Num());
+		for (const TSubclassOf<UModularAbilityTask> TaskClass : ActivationAbilityTasks)
+		{
+			FModularAbilityTaskDefinition& TaskDefinition = ActivationAbilityTaskDefinitions.AddDefaulted_GetRef();
+			TaskDefinition.TaskClass = TaskClass;
+			TaskDefinition.SynchronizeParameters();
+		}
+	}
+
+	PreActivationAbilityTasks.Reset();
+	ActivationAbilityTasks.Reset();
 }
 
 void UModularGameplayAbility::InitializeAbilityContext(

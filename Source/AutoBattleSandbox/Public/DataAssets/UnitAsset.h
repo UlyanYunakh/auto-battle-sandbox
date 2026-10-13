@@ -4,9 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "GameplayTagContainer.h"
 #include "UnitAsset.generated.h"
 
 class UTexture2D;
+class UBattleGameplayAbility;
 
 /**
  * Unit configuration data.
@@ -36,4 +38,13 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Attributes", meta = (ClampMin = "0.0", UIMin = "0.0"))
 	float Armor = 0.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
+	TSubclassOf<UBattleGameplayAbility> BasicAttackAbility;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
+	TArray<TSubclassOf<UBattleGameplayAbility>> Abilities;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Tags")
+	FGameplayTagContainer InitialGameplayTags;
 };

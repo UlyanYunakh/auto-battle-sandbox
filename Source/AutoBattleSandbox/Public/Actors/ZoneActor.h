@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "GameplayTagContainer.h"
 #include "ZoneActor.generated.h"
 
 class UBattleAbilitySystem;
@@ -59,9 +60,38 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Zone|Layout")
 	int32 GetSlotIndexAtWorldLocation(FVector WorldLocation) const;
 
+	UFUNCTION(BlueprintPure, Category = "Zone")
+	FGameplayTag GetTeamTag() const { return TeamTag; }
+
+	UFUNCTION(BlueprintPure, Category = "Zone")
+	bool IsBattleLocked() const { return bBattleLocked; }
+
+	UFUNCTION(BlueprintCallable, Category = "Zone")
+	void SetBattleLocked(bool bLocked);
+
+	UFUNCTION(BlueprintPure, Category = "Zone")
+	bool HasLivingUnits() const;
+
+	const TArray<TObjectPtr<AUnitActor>>& GetUnits() const { return UnitActors; }
+	void RemoveDefeatedUnits();
+
+public:
+	UPROPERTY(BlueprintAssignable, Category = "Zone|Events")
+	FZoneUnitChangedSignature OnUnitAdded;
+
+	UPROPERTY(BlueprintAssignable, Category = "Zone|Events")
+	FZoneUnitChangedSignature OnUnitRemoved;
+
+	UPROPERTY(BlueprintAssignable, Category = "Zone|Events")
+	FZonePreviewChangedSignature OnPreviewUnitChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Zone|Events")
+	FZoneLayoutChangedSignature OnLayoutChanged;
+
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 #if WITH_EDITOR
 	virtual void OnConstruction(const FTransform& Transform) override;
@@ -99,6 +129,12 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zone|Layout")
 	bool bCenterUnits = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zone|Team")
+	FGameplayTag TeamTag;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Zone|Team")
+	bool bBattleLocked = false;
+
 #if WITH_EDITORONLY_DATA
 	UPROPERTY(EditAnywhere, Category = "Zone|Layout|Editor Preview")
 	bool bPreviewActorsInEditor = false;
@@ -117,18 +153,8 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Zone|Animation", meta = (ClampMin = "0.0"))
 	float LayoutAnimationDuration = 0.25f;
 
-public:
-	UPROPERTY(BlueprintAssignable, Category = "Zone|Events")
-	FZoneUnitChangedSignature OnUnitAdded;
-
-	UPROPERTY(BlueprintAssignable, Category = "Zone|Events")
-	FZoneUnitChangedSignature OnUnitRemoved;
-
-	UPROPERTY(BlueprintAssignable, Category = "Zone|Events")
-	FZonePreviewChangedSignature OnPreviewUnitChanged;
-
-	UPROPERTY(BlueprintAssignable, Category = "Zone|Events")
-	FZoneLayoutChangedSignature OnLayoutChanged;
+private:
+	bool RemoveUnitInternal(AUnitActor* UnitActor);
 
 private:
 	UPROPERTY(BlueprintReadOnly, Category = "Zone", meta = (AllowPrivateAccess = "true"))

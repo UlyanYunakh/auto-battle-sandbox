@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ModularAbilityTaskDefinition.h"
 #include "ModularGameplayAbilityContext.h"
 #include "Abilities/GameplayAbility.h"
 
@@ -53,6 +54,12 @@ class MODULARABILITYSYSTEM_API UModularGameplayAbility : public UGameplayAbility
 
 public:
 	// Begin of UGameplayAbility overrides
+	virtual void PostLoad() override;
+
+#if WITH_EDITOR
+	virtual void PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedEvent) override;
+#endif
+
 	virtual bool CanActivateAbility(
 		const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
@@ -84,7 +91,7 @@ public:
 		bool bReplicateEndAbility,
 		bool bWasCancelled) override;
 	//~End of UGameplayAbility overrides
-	
+
 	/**
 	 * Freezes this activation without ending it. Ability-specific work, such as
 	 * montages and timers, should be paused in OnAbilityFrozen.
@@ -113,11 +120,11 @@ public:
 	/** Updates the activation context before the ability commits. */
 	UFUNCTION(BlueprintCallable, Category = "Ability|Context")
 	bool TryUpdateAbilityContext(const FModularGameplayAbilityContext& NewAbilityContext);
-	
+
 public:
 	UPROPERTY(BlueprintAssignable)
 	FOnAbilityFrozen OnModularAbilityFrozen;
-	
+
 	UPROPERTY(BlueprintAssignable)
 	FOnAbilityResumed OnModularAbilityResumed;
 
@@ -130,6 +137,7 @@ protected:
 	UFUNCTION(BlueprintNativeEvent, Category = "Ability|Freeze", meta = (DisplayName = "On Ability Resumed"))
 	void OnAbilityResumed();
 
+protected:
 	UPROPERTY(BlueprintReadOnly, Transient, Category = "Ability|State")
 	EModularGameplayAbilityState AbilityState = EModularGameplayAbilityState::Inactive;
 
@@ -141,30 +149,34 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Activation Events", meta = (AllowPrivateAccess))
 	bool bHasPreActivationEvent = false;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Activation Events", meta = (EditCondition = "bHasPreActivationEvent", AllowPrivateAccess))
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Activation Events",
+		meta = (EditCondition = "bHasPreActivationEvent", AllowPrivateAccess))
 	FGameplayTag PreActivationEventTag = FGameplayTag::EmptyTag;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Activation Events", meta = (AllowPrivateAccess))
 	bool bHasPostActivationEvent = false;
-	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Activation Events", meta = (EditCondition = "bHasPostActivationEvent", AllowPrivateAccess))
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Activation Events",
+		meta = (EditCondition = "bHasPostActivationEvent", AllowPrivateAccess))
 	FGameplayTag PostActivationEventTag = FGameplayTag::EmptyTag;
 
 	/**
 	 * Ordered list of Modular Ability Tasks to be activated before activating ability itself. 
 	 * Meant for prep work, such as target selection
 	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Pre Activation Ability Tasks", meta = (AllowPrivateAccess))
-	TArray<TSubclassOf<UModularAbilityTask>> PreActivationAbilityTasks;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Pre Activation Ability Tasks",
+		meta = (AllowPrivateAccess, DisplayName = "Pre Activation Ability Tasks"))
+	TArray<FModularAbilityTaskDefinition> PreActivationAbilityTaskDefinitions;
 
 	/**
 	 * Ordered list of Modular Ability Tasks to be activated after pre activation has
 	 * completed and the ability has committed.
 	 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Activation Ability Tasks", meta = (AllowPrivateAccess))
-	TArray<TSubclassOf<UModularAbilityTask>> ActivationAbilityTasks;
-	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Activation Ability Tasks",
+		meta = (AllowPrivateAccess, DisplayName = "Activation Ability Tasks"))
+	TArray<FModularAbilityTaskDefinition> ActivationAbilityTaskDefinitions;
+
 private:
 	UFUNCTION()
 	void HandleModularAbilityTaskComplete(FModularGameplayAbilityContext NewAbilityContext);
@@ -178,9 +190,11 @@ private:
 	void ContinuePendingActivation();
 	void StartActivationTasks();
 	void FinishActivationTasks();
-	void StartTaskList(const TArray<TSubclassOf<UModularAbilityTask>>& AbilityTasks);
+	void StartTaskList(const TArray<FModularAbilityTaskDefinition>& AbilityTasks);
 	bool StartNextTask();
 	void ClearActiveTask(bool bEndTask = false);
+	void SynchronizeTaskDefinitions();
+	void MigrateDeprecatedTaskDefinitions();
 	void InitializeAbilityContext(
 		const FGameplayAbilitySpecHandle Handle,
 		const FGameplayAbilityActorInfo* ActorInfo,
@@ -189,13 +203,22 @@ private:
 	void BroadcastGameplayEvent(FGameplayTag EventTag);
 	void CancelAbilityActivation();
 
+private:
+	/** Retained only to migrate ability assets created before configurable task definitions. */
+	UPROPERTY(meta = (DeprecatedProperty, DeprecationMessage = "Use PreActivationAbilityTaskDefinitions."))
+	TArray<TSubclassOf<UModularAbilityTask>> PreActivationAbilityTasks;
+
+	/** Retained only to migrate ability assets created before configurable task definitions. */
+	UPROPERTY(meta = (DeprecatedProperty, DeprecationMessage = "Use ActivationAbilityTaskDefinitions."))
+	TArray<TSubclassOf<UModularAbilityTask>> ActivationAbilityTasks;
+
 	FModularGameplayAbilityContext AbilityContext;
 	FModularGameplayAbilityContext PendingInitialAbilityContext;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UModularAbilityTask> ActiveModularAbilityTask = nullptr;
 
-	const TArray<TSubclassOf<UModularAbilityTask>>* ActiveAbilityTaskList = nullptr;
+	const TArray<FModularAbilityTaskDefinition>* ActiveAbilityTaskList = nullptr;
 	int32 ActiveAbilityTaskIndex = INDEX_NONE;
 	bool bRunningPreActivationTasks = false;
 	bool bAbilityCommitted = false;

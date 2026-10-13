@@ -30,6 +30,19 @@ void AZoneActor::BeginPlay()
 	Super::BeginPlay();
 }
 
+void AZoneActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	for (AUnitActor* UnitActor : UnitActors)
+	{
+		if (IsValid(UnitActor) && UnitActor->GetOwningZone() == this)
+		{
+			UnitActor->SetOwningZone(nullptr);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
 #if WITH_EDITOR
 void AZoneActor::OnConstruction(const FTransform& Transform)
 {
@@ -49,12 +62,16 @@ void AZoneActor::Tick(float DeltaTime)
 
 bool AZoneActor::AddUnit(AUnitActor* UnitActor)
 {
-	if (!IsValid(UnitActor))
+	if (bBattleLocked || !IsValid(UnitActor))
 	{
 		return false;
 	}
 
 	if (ContainsUnit(UnitActor))
+	{
+		return false;
+	}
+	if (UnitActor->GetOwningZone() && UnitActor->GetOwningZone() != this)
 	{
 		return false;
 	}
@@ -72,12 +89,22 @@ bool AZoneActor::AddUnit(AUnitActor* UnitActor)
 	}
 
 	UnitActors.Add(UnitActor);
+	UnitActor->SetOwningZone(this);
 	OnUnitAdded.Broadcast(this, UnitActor);
 	RefreshUnitLayout(bAnimateLayoutChanges);
 	return true;
 }
 
 bool AZoneActor::RemoveUnit(AUnitActor* UnitActor)
+{
+	if (bBattleLocked)
+	{
+		return false;
+	}
+	return RemoveUnitInternal(UnitActor);
+}
+
+bool AZoneActor::RemoveUnitInternal(AUnitActor* UnitActor)
 {
 	if (!IsValid(UnitActor))
 	{
@@ -88,6 +115,10 @@ bool AZoneActor::RemoveUnit(AUnitActor* UnitActor)
 	if (RemovedCount <= 0)
 	{
 		return false;
+	}
+	if (UnitActor->GetOwningZone() == this)
+	{
+		UnitActor->SetOwningZone(nullptr);
 	}
 
 	const int32 AnimationIndex = FindAnimationIndexForActor(UnitActor);
@@ -108,7 +139,11 @@ bool AZoneActor::ContainsUnit(const AUnitActor* UnitActor) const
 
 bool AZoneActor::SetPreviewUnit(AUnitActor* UnitActor, int32 SlotIndex)
 {
-	if (!IsValid(UnitActor))
+	if (bBattleLocked || !IsValid(UnitActor))
+	{
+		return false;
+	}
+	if (UnitActor->GetOwningZone() && UnitActor->GetOwningZone() != this)
 	{
 		return false;
 	}
@@ -164,6 +199,11 @@ void AZoneActor::ClearPreviewUnit()
 
 bool AZoneActor::CommitPreviewUnit()
 {
+	if (bBattleLocked)
+	{
+		return false;
+	}
+
 	AUnitActor* UnitActor = PreviewActor;
 	if (!IsValid(UnitActor) || ContainsUnit(UnitActor) || !HasFreeSlot())
 	{
@@ -176,6 +216,7 @@ bool AZoneActor::CommitPreviewUnit()
 	OnPreviewUnitChanged.Broadcast(this, nullptr, INDEX_NONE);
 
 	UnitActors.Insert(UnitActor, SlotIndex);
+	UnitActor->SetOwningZone(this);
 	OnUnitAdded.Broadcast(this, UnitActor);
 	RefreshUnitLayout(bAnimateLayoutChanges);
 	return true;
@@ -188,12 +229,12 @@ int32 AZoneActor::GetUnitCount() const
 
 bool AZoneActor::HasFreeSlot() const
 {
-	return MaxUnitCount <= 0 || UnitActors.Num() < MaxUnitCount;
+	return !bBattleLocked && (MaxUnitCount <= 0 || UnitActors.Num() < MaxUnitCount);
 }
 
 int32 AZoneActor::GetSlotIndexAtWorldLocation(FVector WorldLocation) const
 {
-	if (!HasFreeSlot())
+	if (bBattleLocked || !HasFreeSlot())
 	{
 		return INDEX_NONE;
 	}
@@ -210,6 +251,65 @@ int32 AZoneActor::GetSlotIndexAtWorldLocation(FVector WorldLocation) const
 	const float LocalPosition = GetActorTransform().InverseTransformPosition(WorldLocation).X - LocalLayoutOffset.X;
 	const int32 SlotIndex = FMath::RoundToInt((LocalPosition - StartOffset) / SpaceBetweenUnits);
 	return FMath::Clamp(SlotIndex, 0, TotalSlots - 1);
+}
+
+void AZoneActor::SetBattleLocked(const bool bLocked)
+{
+	if (bBattleLocked == bLocked)
+	{
+		return;
+	}
+
+	bBattleLocked = bLocked;
+	if (bBattleLocked)
+	{
+		ClearPreviewUnit();
+	}
+}
+
+bool AZoneActor::HasLivingUnits() const
+{
+	for (const AUnitActor* UnitActor : UnitActors)
+	{
+		if (IsValid(UnitActor) && UnitActor->IsAlive())
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void AZoneActor::RemoveDefeatedUnits()
+{
+	bool bRemovedAnyUnit = false;
+	for (int32 Index = UnitActors.Num() - 1; Index >= 0; --Index)
+	{
+		AUnitActor* UnitActor = UnitActors[Index];
+		if (IsValid(UnitActor) && UnitActor->IsAlive())
+		{
+			continue;
+		}
+
+		UnitActors.RemoveAt(Index);
+		if (IsValid(UnitActor))
+		{
+			if (const int32 AnimationIndex = FindAnimationIndexForActor(UnitActor); AnimationIndex != INDEX_NONE)
+			{
+				ActiveLayoutAnimations.RemoveAtSwap(AnimationIndex);
+			}
+			if (UnitActor->GetOwningZone() == this)
+			{
+				UnitActor->SetOwningZone(nullptr);
+			}
+			OnUnitRemoved.Broadcast(this, UnitActor);
+		}
+		bRemovedAnyUnit = true;
+	}
+
+	if (bRemovedAnyUnit)
+	{
+		RefreshUnitLayout(bAnimateLayoutChanges);
+	}
 }
 
 void AZoneActor::RefreshUnitLayout(bool bAnimate)

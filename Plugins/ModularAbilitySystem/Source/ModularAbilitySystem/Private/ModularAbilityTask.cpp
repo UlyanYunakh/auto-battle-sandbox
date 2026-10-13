@@ -3,10 +3,13 @@
 
 #include "ModularAbilityTask.h"
 
+#include "ModularAbilityTaskDefinition.h"
+#include "ModularGameplayAbility.h"
+
 UModularAbilityTask* UModularAbilityTask::CreateModularAbilityTask(
 	TSubclassOf<UModularAbilityTask> AbilityTaskClass,
 	UModularGameplayAbility* OwningAbility,
-	FModularGameplayAbilityContext& AbilityContext)
+	const FModularGameplayAbilityContext& AbilityContext)
 {
 	if (!OwningAbility || !AbilityTaskClass || AbilityTaskClass->HasAnyClassFlags(CLASS_Abstract))
 	{
@@ -21,25 +24,60 @@ UModularAbilityTask* UModularAbilityTask::CreateModularAbilityTask(
 
 	Task->InitTask(*OwningAbility, OwningAbility->GetGameplayTaskDefaultPriority());
 	UAbilityTask::DebugRecordAbilityTaskCreatedByAbility(OwningAbility);
-	
-	Task->OwningModularAbility = OwningAbility;
-	Task->CachedAbilityContext = AbilityContext;
+
+	Task->InitializeModularTask(*OwningAbility, AbilityContext);
 
 	return Task;
+}
+
+UModularAbilityTask* UModularAbilityTask::CreateConfiguredModularAbilityTask(
+	const FModularAbilityTaskDefinition& TaskDefinition,
+	UModularGameplayAbility* OwningAbility,
+	const FModularGameplayAbilityContext& AbilityContext)
+{
+	if (!OwningAbility || !TaskDefinition.IsValid())
+	{
+		return nullptr;
+	}
+
+	UModularAbilityTask* Task = NewObject<UModularAbilityTask>(OwningAbility, TaskDefinition.TaskClass);
+	if (!Task)
+	{
+		return nullptr;
+	}
+
+	Task->InitTask(*OwningAbility, OwningAbility->GetGameplayTaskDefaultPriority());
+	UAbilityTask::DebugRecordAbilityTaskCreatedByAbility(OwningAbility);
+	Task->InitializeModularTask(*OwningAbility, AbilityContext);
+
+	if (!Task->InitializeFromTaskParameters(TaskDefinition.Parameters))
+	{
+		Task->EndTask();
+		return nullptr;
+	}
+
+	return Task;
+}
+
+UScriptStruct* UModularAbilityTask::GetTaskParametersStruct() const
+{
+	return FModularAbilityTaskParameters::StaticStruct();
 }
 
 void UModularAbilityTask::Activate()
 {
 	Super::Activate();
-	
+	if (bModularTaskFinished)
+	{
+		return;
+	}
+
 	BindOnAbilityFrozenEvent();
 	BindOnAbilityResumedEvent();
-	
+
 	if (!CanActivateTask() || !ActivateModularAbilityTask())
 	{
-		EndTask();
-		
-		OnModularAbilityTaskCanceled.Broadcast();
+		CancelModularAbilityTask();
 	}
 }
 
@@ -56,21 +94,63 @@ void UModularAbilityTask::OnDestroy(bool bInOwnerFinished)
 
 bool UModularAbilityTask::ActivateModularAbilityTask()
 {
-	EndTask();
-	
-	OnModularAbilityTaskComplete.Broadcast(CachedAbilityContext);
-	
+	CompleteModularAbilityTask(CachedAbilityContext);
 	return true;
 }
 
 bool UModularAbilityTask::CanActivateTask() const
 {
-	return true;
+	return OwningModularAbility.IsValid();
+}
+
+bool UModularAbilityTask::InitializeFromTaskParameters(const FInstancedStruct& Parameters)
+{
+	return Parameters.GetScriptStruct() == GetTaskParametersStruct();
+}
+
+void UModularAbilityTask::InitializeModularTask(
+	UModularGameplayAbility& InOwningAbility,
+	const FModularGameplayAbilityContext& AbilityContext)
+{
+	OwningModularAbility = &InOwningAbility;
+	CachedAbilityContext = AbilityContext;
+	bModularTaskFinished = false;
+}
+
+void UModularAbilityTask::CompleteModularAbilityTask(
+	const FModularGameplayAbilityContext& NewAbilityContext)
+{
+	if (bModularTaskFinished)
+	{
+		return;
+	}
+
+	bModularTaskFinished = true;
+	CachedAbilityContext = NewAbilityContext;
+	if (ShouldBroadcastAbilityTaskDelegates())
+	{
+		OnModularAbilityTaskComplete.Broadcast(CachedAbilityContext);
+	}
+	EndTask();
+}
+
+void UModularAbilityTask::CancelModularAbilityTask()
+{
+	if (bModularTaskFinished)
+	{
+		return;
+	}
+
+	bModularTaskFinished = true;
+	if (ShouldBroadcastAbilityTaskDelegates())
+	{
+		OnModularAbilityTaskCanceled.Broadcast();
+	}
+	EndTask();
 }
 
 void UModularAbilityTask::OnOwningAbilityFrozen()
 {
-	
 }
 
 void UModularAbilityTask::OnOwningAbilityResumed(const FModularGameplayAbilityContext& AbilityContext)
@@ -82,7 +162,7 @@ void UModularAbilityTask::BindOnAbilityFrozenEvent()
 {
 	if (OwningModularAbility.IsValid())
 	{
-		OwningModularAbility->OnModularAbilityFrozen.AddDynamic(this, &ThisClass::OnOwningAbilityFrozen);
+		OwningModularAbility->OnModularAbilityFrozen.AddUniqueDynamic(this, &ThisClass::OnOwningAbilityFrozen);
 	}
 }
 
@@ -90,6 +170,6 @@ void UModularAbilityTask::BindOnAbilityResumedEvent()
 {
 	if (OwningModularAbility.IsValid())
 	{
-		OwningModularAbility->OnModularAbilityResumed.AddDynamic(this, &ThisClass::OnOwningAbilityResumed);
+		OwningModularAbility->OnModularAbilityResumed.AddUniqueDynamic(this, &ThisClass::OnOwningAbilityResumed);
 	}
 }
