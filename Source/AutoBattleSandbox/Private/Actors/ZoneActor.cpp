@@ -7,6 +7,7 @@
 #include "Actors/UnitActor.h"
 #include "Collision/AutoBattleCollisionChannels.h"
 #include "Components/BoxComponent.h"
+#include "Engine/World.h"
 #if WITH_EDITOR
 #include "Components/ChildActorComponent.h"
 #endif
@@ -285,7 +286,7 @@ void AZoneActor::RemoveDefeatedUnits()
 	for (int32 Index = UnitActors.Num() - 1; Index >= 0; --Index)
 	{
 		AUnitActor* UnitActor = UnitActors[Index];
-		if (IsValid(UnitActor) && UnitActor->IsAlive())
+		if (IsValid(UnitActor) && (UnitActor->IsAlive() || UnitActor->IsDeathAnimationPlaying()))
 		{
 			continue;
 		}

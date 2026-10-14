@@ -17,6 +17,14 @@ struct FBattleAbilitySequenceActivation
 	FGlobalGameplayEventId EventId;
 };
 
+enum class EBattleDeathSequencePhase : uint8
+{
+	None,
+	BeforeEvent,
+	AfterEvent,
+	Complete
+};
+
 /** Adapts GAS ability lifecycle events to the project-level sequence and global-event systems. */
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class AUTOBATTLESANDBOX_API UBattleAbilitySystem : public UAbilitySystemComponent
@@ -71,6 +79,10 @@ private:
 	void RegisterAbilitySpec(const FGameplayAbilitySpec& AbilitySpec);
 	void UnregisterAbilitySpec(FGameplayAbilitySpecHandle AbilityHandle);
 	void HandleGlobalAbilityActivationRequested(const FGlobalGameplayAbilityActivationRequest& Request);
+	UFUNCTION()
+	void HandleSequenceNodeStateChanged(FAbilitySequenceId SequenceId, FAbilitySequenceNode Node);
+	UFUNCTION()
+	void HandleSequenceFinished(FAbilitySequenceId SequenceId, EAbilitySequenceState FinalState);
 	bool CreateRootSequenceActivation(
 		const UBattleGameplayAbility& Ability,
 		FBattleAbilitySequenceActivation& OutActivation) const;
@@ -84,6 +96,10 @@ private:
 		FGameplayAbilitySpecHandle AbilityHandle,
 		FBattleAbilityActivationContext& OutActivationContext);
 	void DiscardActivationContext(FGameplayAbilitySpecHandle AbilityHandle);
+	void TryStartDeathSequence();
+	void ContinueDeathSequence();
+	bool BroadcastDeathEvent(FGameplayTag EventTag);
+	void CompleteDeathSequence();
 
 private:
 	TWeakObjectPtr<UAutoBattleAbilitySequenceSubsystem> SequenceSubsystem;
@@ -94,4 +110,8 @@ private:
 	TMap<FGameplayAbilitySpecHandle, FAbilitySequenceId> LastSequenceIds;
 	TMap<FGameplayAbilitySpecHandle, TArray<FBattleAbilityActivationContext>> PendingActivationContexts;
 	FDelegateHandle ActivationRequestDelegateHandle;
+	FAbilitySequenceId DeathSequenceId;
+	FAbilitySequenceNodeId DeathSequenceRootNodeId;
+	EBattleDeathSequencePhase DeathSequencePhase = EBattleDeathSequencePhase::None;
+	bool bDeathResolved = false;
 };

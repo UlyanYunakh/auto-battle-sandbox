@@ -41,6 +41,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Unit")
 	bool IsAlive() const;
 
+	UFUNCTION(BlueprintPure, Category = "Unit|Death")
+	bool IsDeathAnimationPlaying() const { return bDeathAnimationPlaying; }
+
+	void StartDeathAnimation();
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Unit|Death")
+	void PlayDeathAnimation();
+	virtual void PlayDeathAnimation_Implementation();
+
+	UFUNCTION(BlueprintCallable, Category = "Unit|Death")
+	void FinishDeathAnimation();
+
 	UFUNCTION(BlueprintPure, Category = "Unit")
 	TSubclassOf<UBattleGameplayAbility> GetBasicAttackAbility() const { return BasicAttackAbility; }
 
@@ -84,9 +96,11 @@ private:
 
 	void GrantUnitAbilities(const UUnitAsset& UnitDataAsset);
 	void RemoveGrantedUnitAbilities();
+	void BeginDeathAnimationPlayback();
 	void SetOwningZone(AZoneActor* ZoneActor) { OwningZone = ZoneActor; }
 
 private:
 	TArray<FGameplayAbilitySpecHandle> GrantedAbilityHandles;
 	FGameplayTagContainer AppliedInitialGameplayTags;
+	bool bDeathAnimationPlaying = false;
 };

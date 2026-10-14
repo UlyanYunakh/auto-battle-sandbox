@@ -103,6 +103,7 @@ private:
 	void StartCurrentAttack(AUnitActor& Attacker, AUnitActor& Target);
 	void CompleteCurrentTurn(bool bAbilityActivated);
 	void ResolveDefeatedUnits();
+	bool HasPendingDeathAnimations() const;
 	bool TryFinishForTeamDefeat();
 	void FinishBattle(EAutoBattleResult Result, AZoneActor* WinningTeam, bool bBroadcast);
 	void BindSequenceEvents();

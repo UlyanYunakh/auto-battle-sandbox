@@ -8,9 +8,11 @@
 #include "AbilitySystem/AttributeSet/OffensiveAttributeSet.h"
 #include "AbilitySystem/Components/BattleAbilitySystem.h"
 #include "AbilitySystem/Targeting/AbilityTargetingSubsystem.h"
+#include "Actors/ZoneActor.h"
 #include "DataAssets/UnitAsset.h"
 #include "Engine/World.h"
 #include "GameplayAbilitySpec.h"
+#include "TimerManager.h"
 
 
 AUnitActor::AUnitActor()
@@ -90,6 +92,54 @@ TSoftObjectPtr<UTexture2D> AUnitActor::GetUnitArt() const
 bool AUnitActor::IsAlive() const
 {
 	return DefensiveAttributeSet && DefensiveAttributeSet->GetHealth() > 0.0f;
+}
+
+void AUnitActor::StartDeathAnimation()
+{
+	if (bDeathAnimationPlaying || IsActorBeingDestroyed())
+	{
+		return;
+	}
+
+	bDeathAnimationPlaying = true;
+	if (const UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick(
+			FTimerDelegate::CreateUObject(this, &ThisClass::BeginDeathAnimationPlayback));
+		return;
+	}
+
+	BeginDeathAnimationPlayback();
+}
+
+void AUnitActor::BeginDeathAnimationPlayback()
+{
+	if (!bDeathAnimationPlaying || IsActorBeingDestroyed())
+	{
+		return;
+	}
+
+	PlayDeathAnimation();
+}
+
+void AUnitActor::PlayDeathAnimation_Implementation()
+{
+	FinishDeathAnimation();
+}
+
+void AUnitActor::FinishDeathAnimation()
+{
+	if (IsActorBeingDestroyed())
+	{
+		return;
+	}
+
+	bDeathAnimationPlaying = false;
+	if (OwningZone)
+	{
+		OwningZone->RemoveUnitInternal(this);
+	}
+	Destroy();
 }
 
 void AUnitActor::BeginPlay()

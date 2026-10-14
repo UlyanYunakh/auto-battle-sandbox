@@ -154,6 +154,8 @@ protected:
 	float LayoutAnimationDuration = 0.25f;
 
 private:
+	friend class AUnitActor;
+
 	bool RemoveUnitInternal(AUnitActor* UnitActor);
 
 private:

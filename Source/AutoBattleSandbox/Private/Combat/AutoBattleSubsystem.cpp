@@ -104,6 +104,11 @@ void UAutoBattleSubsystem::AdvanceBattle()
 	{
 		return;
 	}
+	if (HasPendingDeathAnimations())
+	{
+		ScheduleAdvance();
+		return;
+	}
 
 	BattleState = EAutoBattleState::ResolvingDefeats;
 	ResolveDefeatedUnits();
@@ -366,6 +371,28 @@ void UAutoBattleSubsystem::ResolveDefeatedUnits()
 	{
 		TeamBZone->RemoveDefeatedUnits();
 	}
+}
+
+bool UAutoBattleSubsystem::HasPendingDeathAnimations() const
+{
+	const AZoneActor* Zones[] = {TeamAZone, TeamBZone};
+	for (const AZoneActor* Zone : Zones)
+	{
+		if (!IsValid(Zone))
+		{
+			continue;
+		}
+
+		for (const AUnitActor* Unit : Zone->GetUnits())
+		{
+			if (IsValid(Unit) && Unit->IsDeathAnimationPlaying())
+			{
+				return true;
+			}
+		}
+	}
+
+	return false;
 }
 
 bool UAutoBattleSubsystem::TryFinishForTeamDefeat()

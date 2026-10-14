@@ -3,6 +3,8 @@
 #include "AbilitySystem/Abilities/BattleGameplayAbility.h"
 #include "AbilitySystem/Events/GlobalGameplayEventSubsystem.h"
 #include "AbilitySystem/Sequences/AbilitySequenceSubsystem.h"
+#include "Actors/UnitActor.h"
+#include "Combat/AutoBattleGameplayTags.h"
 #include "Engine/World.h"
 #include "GameplayAbilitySpec.h"
 
@@ -229,6 +231,10 @@ void UBattleAbilitySystem::InitializeSequenceIntegration()
 	ActivationRequestDelegateHandle = GlobalEventSubsystemInstance->OnAbilityActivationRequested().AddUObject(
 		this,
 		&ThisClass::HandleGlobalAbilityActivationRequested);
+	SequenceSubsystem->OnSequenceNodeStateChanged.AddUniqueDynamic(
+		this,
+		&ThisClass::HandleSequenceNodeStateChanged);
+	SequenceSubsystem->OnSequenceFinished.AddUniqueDynamic(this, &ThisClass::HandleSequenceFinished);
 
 	for (const FGameplayAbilitySpec& AbilitySpec : GetActivatableAbilities())
 	{
@@ -238,6 +244,20 @@ void UBattleAbilitySystem::InitializeSequenceIntegration()
 
 void UBattleAbilitySystem::ShutdownSequenceIntegration()
 {
+	if (UAutoBattleAbilitySequenceSubsystem* SequenceSubsystemInstance = SequenceSubsystem.Get())
+	{
+		SequenceSubsystemInstance->OnSequenceNodeStateChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleSequenceNodeStateChanged);
+		SequenceSubsystemInstance->OnSequenceFinished.RemoveDynamic(this, &ThisClass::HandleSequenceFinished);
+
+		if (DeathSequenceId.IsValid() && SequenceSubsystemInstance->IsSequenceRunning(DeathSequenceId))
+		{
+			TArray<FAbilitySequenceNodeId> IgnoredNodesToCancel;
+			SequenceSubsystemInstance->CancelSequence(DeathSequenceId, IgnoredNodesToCancel);
+		}
+	}
+
 	if (UAutoBattleGlobalGameplayEventSubsystem* GlobalEventSubsystemInstance = GlobalEventSubsystem.Get())
 	{
 		if (ActivationRequestDelegateHandle.IsValid())
@@ -253,6 +273,9 @@ void UBattleAbilitySystem::ShutdownSequenceIntegration()
 	PendingSequenceActivations.Reset();
 	LastSequenceIds.Reset();
 	PendingActivationContexts.Reset();
+	DeathSequenceId = FAbilitySequenceId();
+	DeathSequenceRootNodeId = FAbilitySequenceNodeId();
+	DeathSequencePhase = EBattleDeathSequencePhase::None;
 
 	TArray<FBattleAbilitySequenceActivation> Activations;
 	ActiveSequenceActivations.GenerateValueArray(Activations);
@@ -359,6 +382,28 @@ void UBattleAbilitySystem::HandleGlobalAbilityActivationRequested(
 	}
 }
 
+void UBattleAbilitySystem::HandleSequenceNodeStateChanged(
+	const FAbilitySequenceId SequenceId,
+	const FAbilitySequenceNode Node)
+{
+	if (SequenceId == DeathSequenceId
+		&& Node.NodeId == DeathSequenceRootNodeId
+		&& Node.State == EAbilitySequenceNodeState::Active)
+	{
+		ContinueDeathSequence();
+	}
+}
+
+void UBattleAbilitySystem::HandleSequenceFinished(
+	const FAbilitySequenceId SequenceId,
+	const EAbilitySequenceState)
+{
+	if (SequenceId != DeathSequenceId)
+	{
+		TryStartDeathSequence();
+	}
+}
+
 void UBattleAbilitySystem::PushActivationContext(
 	const FGameplayAbilitySpecHandle AbilityHandle,
 	const FBattleAbilityActivationContext& ActivationContext)
@@ -392,6 +437,107 @@ void UBattleAbilitySystem::DiscardActivationContext(const FGameplayAbilitySpecHa
 {
 	FBattleAbilityActivationContext IgnoredContext;
 	ConsumeActivationContext(AbilityHandle, IgnoredContext);
+}
+
+void UBattleAbilitySystem::TryStartDeathSequence()
+{
+	AUnitActor* UnitActor = Cast<AUnitActor>(GetOwner());
+	UAutoBattleAbilitySequenceSubsystem* SequenceSubsystemInstance = SequenceSubsystem.Get();
+	if (bDeathResolved || DeathSequencePhase != EBattleDeathSequencePhase::None
+		|| !IsValid(UnitActor) || UnitActor->IsAlive() || !SequenceSubsystemInstance)
+	{
+		return;
+	}
+
+	FAbilitySequenceNodeRequest DeathRequest;
+	DeathRequest.DebugName = TEXT("Death");
+	if (!SequenceSubsystemInstance->StartSequence(
+		DeathRequest,
+		DeathSequenceId,
+		DeathSequenceRootNodeId))
+	{
+		return;
+	}
+
+	DeathSequencePhase = EBattleDeathSequencePhase::BeforeEvent;
+	ContinueDeathSequence();
+}
+
+void UBattleAbilitySystem::ContinueDeathSequence()
+{
+	if (DeathSequencePhase == EBattleDeathSequencePhase::BeforeEvent)
+	{
+		DeathSequencePhase = EBattleDeathSequencePhase::AfterEvent;
+		if (BroadcastDeathEvent(AutoBattleGameplayTags::Battle_Event_Death_Before))
+		{
+			return;
+		}
+	}
+
+	if (DeathSequencePhase == EBattleDeathSequencePhase::AfterEvent)
+	{
+		DeathSequencePhase = EBattleDeathSequencePhase::Complete;
+		if (BroadcastDeathEvent(AutoBattleGameplayTags::Battle_Event_Death_After))
+		{
+			return;
+		}
+	}
+
+	if (DeathSequencePhase == EBattleDeathSequencePhase::Complete)
+	{
+		CompleteDeathSequence();
+	}
+}
+
+bool UBattleAbilitySystem::BroadcastDeathEvent(const FGameplayTag EventTag)
+{
+	AUnitActor* UnitActor = Cast<AUnitActor>(GetOwner());
+	UAutoBattleGlobalGameplayEventSubsystem* GlobalEventSubsystemInstance = GlobalEventSubsystem.Get();
+	if (!IsValid(UnitActor) || !GlobalEventSubsystemInstance)
+	{
+		return false;
+	}
+
+	FGameplayEventData EventData;
+	EventData.Instigator = UnitActor;
+	EventData.Target = UnitActor;
+
+	FGlobalGameplayEventDispatch Dispatch;
+	return GlobalEventSubsystemInstance->BroadcastGlobalEvent(
+			DeathSequenceId,
+			DeathSequenceRootNodeId,
+			EventTag,
+			EventData,
+			Dispatch)
+		&& !Dispatch.SequenceTransition.AddedNodeIds.IsEmpty();
+}
+
+void UBattleAbilitySystem::CompleteDeathSequence()
+{
+	AUnitActor* UnitActor = Cast<AUnitActor>(GetOwner());
+	UAutoBattleAbilitySequenceSubsystem* SequenceSubsystemInstance = SequenceSubsystem.Get();
+	const FAbilitySequenceId CompletedSequenceId = DeathSequenceId;
+	const FAbilitySequenceNodeId CompletedRootNodeId = DeathSequenceRootNodeId;
+
+	bDeathResolved = true;
+	DeathSequenceId = FAbilitySequenceId();
+	DeathSequenceRootNodeId = FAbilitySequenceNodeId();
+	DeathSequencePhase = EBattleDeathSequencePhase::None;
+
+	if (SequenceSubsystemInstance)
+	{
+		FAbilitySequenceTransition IgnoredTransition;
+		SequenceSubsystemInstance->FinishNode(
+			CompletedSequenceId,
+			CompletedRootNodeId,
+			EAbilitySequenceNodeResult::Succeeded,
+			IgnoredTransition);
+	}
+
+	if (IsValid(UnitActor))
+	{
+		UnitActor->StartDeathAnimation();
+	}
 }
 
 bool UBattleAbilitySystem::CreateRootSequenceActivation(
