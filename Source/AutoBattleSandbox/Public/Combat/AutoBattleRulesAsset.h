@@ -61,4 +61,8 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Auto Battle|State")
 	FGameplayTagContainer UntargetableTags;
+
+	/** Minimum time between the starts of consecutive attacks. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Auto Battle|Timing", meta = (ClampMin = "0.0"))
+	float MinimumAttackInterval = 0.5f;
 };

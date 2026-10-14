@@ -7,6 +7,7 @@
 #include "AbilitySystem/AttributeSet/DefensiveAttributeSet.h"
 #include "AbilitySystem/AttributeSet/OffensiveAttributeSet.h"
 #include "AbilitySystem/Components/BattleAbilitySystem.h"
+#include "AbilitySystem/Tasks/AbilityTask_ApplyGameplayEffectWithAttackAnimation.h"
 #include "AbilitySystem/Targeting/AbilityTargetingSubsystem.h"
 #include "Actors/ZoneActor.h"
 #include "DataAssets/UnitAsset.h"
@@ -140,6 +141,53 @@ void AUnitActor::FinishDeathAnimation()
 		OwningZone->RemoveUnitInternal(this);
 	}
 	Destroy();
+}
+
+bool AUnitActor::StartAttackAnimation(
+	UAbilityTask_ApplyGameplayEffectWithAttackAnimation* AttackTask,
+	const FVector& TargetPosition)
+{
+	if (!IsValid(AttackTask) || ActiveAttackAnimationTask.IsValid() || IsActorBeingDestroyed())
+	{
+		return false;
+	}
+
+	ActiveAttackAnimationTask = AttackTask;
+	PlayAttackAnimation(TargetPosition);
+	return true;
+}
+
+void AUnitActor::PlayAttackAnimation_Implementation(const FVector)
+{
+	ApplyAttackEffect();
+	FinishAttackAnimation();
+}
+
+void AUnitActor::ApplyAttackEffect()
+{
+	if (UAbilityTask_ApplyGameplayEffectWithAttackAnimation* AttackTask = ActiveAttackAnimationTask.Get())
+	{
+		AttackTask->ApplyEffectAtAnimationImpact();
+	}
+}
+
+void AUnitActor::FinishAttackAnimation()
+{
+	UAbilityTask_ApplyGameplayEffectWithAttackAnimation* AttackTask = ActiveAttackAnimationTask.Get();
+	ActiveAttackAnimationTask.Reset();
+	if (AttackTask)
+	{
+		AttackTask->CompleteAttackAnimation();
+	}
+}
+
+void AUnitActor::ClearAttackAnimationTask(
+	const UAbilityTask_ApplyGameplayEffectWithAttackAnimation* AttackTask)
+{
+	if (ActiveAttackAnimationTask.Get() == AttackTask)
+	{
+		ActiveAttackAnimationTask.Reset();
+	}
 }
 
 void AUnitActor::BeginPlay()

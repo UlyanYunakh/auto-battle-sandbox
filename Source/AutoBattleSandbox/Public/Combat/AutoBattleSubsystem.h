@@ -90,7 +90,9 @@ protected:
 private:
 	void BeginRound();
 	void AdvanceBattle();
-	void ScheduleAdvance();
+	void ScheduleAdvance(float Delay = 0.0f);
+	float GetMinimumAttackInterval() const;
+	float GetRemainingAttackDelay() const;
 	AUnitActor* SelectNextAttacker() const;
 	AUnitActor* SelectTarget(AUnitActor& Attacker);
 	int32 CalculateAttackPriority(const AUnitActor& Unit) const;
@@ -136,8 +138,11 @@ private:
 	TSet<TWeakObjectPtr<AUnitActor>> UnitsThatActed;
 	FRandomStream RandomStream;
 	FAbilitySequenceId ActiveSequenceId;
+	FTimerHandle AdvanceTimerHandle;
 	EAutoBattleState BattleState = EAutoBattleState::Inactive;
 	int32 CurrentRound = 0;
+	double NextAttackAllowedTime = 0.0;
 	bool bAnyAttackStartedThisRound = false;
 	bool bAdvanceScheduled = false;
+	bool bWasWaitingForDeathAnimations = false;
 };

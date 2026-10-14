@@ -42,6 +42,8 @@ bool UAutoBattleSubsystem::StartBattle(
 	BattleRules = Rules;
 	SequenceSubsystem = SequenceSubsystemInstance;
 	CurrentRound = 0;
+	NextAttackAllowedTime = 0.0;
+	bWasWaitingForDeathAnimations = false;
 	RandomStream.Initialize(RandomSeed == 0 ? FMath::Rand() : RandomSeed);
 	BattleState = EAutoBattleState::Preparing;
 	TeamAZone->SetBattleLocked(true);
@@ -99,6 +101,7 @@ void UAutoBattleSubsystem::BeginRound()
 
 void UAutoBattleSubsystem::AdvanceBattle()
 {
+	AdvanceTimerHandle.Invalidate();
 	bAdvanceScheduled = false;
 	if (!IsBattleRunning() || BattleState == EAutoBattleState::WaitingForSequence)
 	{
@@ -106,14 +109,32 @@ void UAutoBattleSubsystem::AdvanceBattle()
 	}
 	if (HasPendingDeathAnimations())
 	{
+		bWasWaitingForDeathAnimations = true;
 		ScheduleAdvance();
 		return;
+	}
+	if (bWasWaitingForDeathAnimations)
+	{
+		bWasWaitingForDeathAnimations = false;
+		if (const UWorld* World = GetWorld())
+		{
+			NextAttackAllowedTime = FMath::Max(
+				NextAttackAllowedTime,
+				World->GetTimeSeconds() + GetMinimumAttackInterval());
+		}
 	}
 
 	BattleState = EAutoBattleState::ResolvingDefeats;
 	ResolveDefeatedUnits();
 	if (TryFinishForTeamDefeat())
 	{
+		return;
+	}
+
+	const float RemainingAttackDelay = GetRemainingAttackDelay();
+	if (RemainingAttackDelay > KINDA_SMALL_NUMBER)
+	{
+		ScheduleAdvance(RemainingAttackDelay);
 		return;
 	}
 
@@ -142,7 +163,7 @@ void UAutoBattleSubsystem::AdvanceBattle()
 	StartCurrentAttack(*Attacker, *Target);
 }
 
-void UAutoBattleSubsystem::ScheduleAdvance()
+void UAutoBattleSubsystem::ScheduleAdvance(const float Delay)
 {
 	if (bAdvanceScheduled || !IsBattleRunning())
 	{
@@ -157,7 +178,34 @@ void UAutoBattleSubsystem::ScheduleAdvance()
 	}
 
 	bAdvanceScheduled = true;
+	if (Delay > 0.0f)
+	{
+		World->GetTimerManager().SetTimer(
+			AdvanceTimerHandle,
+			this,
+			&ThisClass::AdvanceBattle,
+			Delay,
+			false);
+		return;
+	}
+
 	World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateUObject(this, &ThisClass::AdvanceBattle));
+}
+
+float UAutoBattleSubsystem::GetMinimumAttackInterval() const
+{
+	return BattleRules ? FMath::Max(0.0f, BattleRules->MinimumAttackInterval) : 0.5f;
+}
+
+float UAutoBattleSubsystem::GetRemainingAttackDelay() const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return 0.0f;
+	}
+
+	return static_cast<float>(FMath::Max(0.0, NextAttackAllowedTime - World->GetTimeSeconds()));
 }
 
 AUnitActor* UAutoBattleSubsystem::SelectNextAttacker() const
@@ -335,6 +383,10 @@ void UAutoBattleSubsystem::StartCurrentAttack(AUnitActor& Attacker, AUnitActor& 
 		return;
 	}
 
+	if (const UWorld* World = GetWorld())
+	{
+		NextAttackAllowedTime = World->GetTimeSeconds() + GetMinimumAttackInterval();
+	}
 	bAnyAttackStartedThisRound = true;
 	const UAutoBattleAbilitySequenceSubsystem* SequenceSubsystemInstance = SequenceSubsystem.Get();
 	if (!ActiveSequenceId.IsValid() || !SequenceSubsystemInstance
@@ -434,7 +486,14 @@ void UAutoBattleSubsystem::FinishBattle(
 	}
 
 	UnbindSequenceEvents();
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(AdvanceTimerHandle);
+	}
+	AdvanceTimerHandle.Invalidate();
 	bAdvanceScheduled = false;
+	NextAttackAllowedTime = 0.0;
+	bWasWaitingForDeathAnimations = false;
 	CurrentAttacker = nullptr;
 	CurrentTarget = nullptr;
 	ActiveSequenceId = FAbilitySequenceId();

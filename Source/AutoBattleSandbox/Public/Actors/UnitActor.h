@@ -10,6 +10,7 @@
 
 class UBattleAbilitySystem;
 class UBattleGameplayAbility;
+class UAbilityTask_ApplyGameplayEffectWithAttackAnimation;
 class UDefensiveAttributeSet;
 class UOffensiveAttributeSet;
 class UTexture2D;
@@ -53,6 +54,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Unit|Death")
 	void FinishDeathAnimation();
 
+	UFUNCTION(BlueprintPure, Category = "Unit|Attack")
+	bool IsAttackAnimationPlaying() const { return ActiveAttackAnimationTask.IsValid(); }
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Unit|Attack")
+	void PlayAttackAnimation(FVector TargetPosition);
+	virtual void PlayAttackAnimation_Implementation(FVector TargetPosition);
+
+	/** Call from the attack animation timeline at the frame where the attack hits. */
+	UFUNCTION(BlueprintCallable, Category = "Unit|Attack")
+	void ApplyAttackEffect();
+
+	/** Call from the attack animation timeline's Finished output. */
+	UFUNCTION(BlueprintCallable, Category = "Unit|Attack")
+	void FinishAttackAnimation();
+
 	UFUNCTION(BlueprintPure, Category = "Unit")
 	TSubclassOf<UBattleGameplayAbility> GetBasicAttackAbility() const { return BasicAttackAbility; }
 
@@ -93,14 +109,20 @@ protected:
 
 private:
 	friend class AZoneActor;
+	friend class UAbilityTask_ApplyGameplayEffectWithAttackAnimation;
 
 	void GrantUnitAbilities(const UUnitAsset& UnitDataAsset);
 	void RemoveGrantedUnitAbilities();
 	void BeginDeathAnimationPlayback();
+	bool StartAttackAnimation(
+		UAbilityTask_ApplyGameplayEffectWithAttackAnimation* AttackTask,
+		const FVector& TargetPosition);
+	void ClearAttackAnimationTask(const UAbilityTask_ApplyGameplayEffectWithAttackAnimation* AttackTask);
 	void SetOwningZone(AZoneActor* ZoneActor) { OwningZone = ZoneActor; }
 
 private:
 	TArray<FGameplayAbilitySpecHandle> GrantedAbilityHandles;
 	FGameplayTagContainer AppliedInitialGameplayTags;
+	TWeakObjectPtr<UAbilityTask_ApplyGameplayEffectWithAttackAnimation> ActiveAttackAnimationTask;
 	bool bDeathAnimationPlaying = false;
 };
