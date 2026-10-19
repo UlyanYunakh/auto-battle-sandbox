@@ -1,6 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "AbilitySystem/Abilities/BattleGameplayAbility.h"
+#include "GameFramework/Actor.h"
 #include "Misc/AutomationTest.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
@@ -23,6 +24,46 @@ bool FBattleGameplayAbilityDefaultsTest::RunTest(const FString&)
 	         Ability->GetGlobalEventTriggers().IsEmpty());
 	TestNull(TEXT("An invalid event tag cannot select a trigger"),
 	         Ability->FindGlobalEventTrigger(FGameplayTag()));
+
+	FGlobalGameplayAbilityTrigger Trigger;
+	TestTrue(TEXT("A trigger without filters has a valid filter configuration"), Trigger.AreFiltersValid());
+	Trigger.Filters.Add(TInstancedStruct<FGlobalGameplayEventFilter>::Make<FGlobalGameplayEventTeamFilter>());
+	TestTrue(TEXT("A concrete team filter is a valid filter configuration"), Trigger.AreFiltersValid());
+	TestFalse(TEXT("A team filter rejects a missing event context"),
+	          Trigger.Filters[0].Get().Matches(FGlobalGameplayEventFilterContext()));
+	TestTrue(TEXT("An unset target resolver is a valid legacy configuration"),
+	         Trigger.IsTargetResolverValid());
+
+	AActor* Instigator = NewObject<AActor>();
+	AActor* Target = NewObject<AActor>();
+	FGameplayEventData EventData;
+	EventData.Instigator = Instigator;
+	EventData.Target = Target;
+	FGlobalGameplayEventFilterContext EventContext;
+	EventContext.EventData = &EventData;
+
+	FAbilityTargetSelectionInput TargetingInput;
+	TestTrue(TEXT("An unset resolver defaults to the event target"),
+	         Trigger.ResolveTargetingInput(EventContext, TargetingInput));
+	TestTrue(TEXT("A resolver does not override the selection task's input policy"),
+	         TargetingInput.Policy == EAbilityTargetInputPolicy::NormalDefinition);
+	TestEqual(TEXT("The default resolver provides one target"), TargetingInput.ProvidedActors.Num(), 1);
+	if (TargetingInput.ProvidedActors.Num() == 1)
+	{
+		TestTrue(TEXT("The default resolver provides the attacked unit"),
+		         TargetingInput.ProvidedActors[0].Get() == Target);
+	}
+
+	FGlobalGameplayEventParticipantTargetResolver ParticipantResolver;
+	ParticipantResolver.Participant = EGlobalGameplayEventParticipant::Instigator;
+	TestTrue(TEXT("The participant resolver can resolve the event instigator"),
+	         ParticipantResolver.Resolve(EventContext, TargetingInput));
+	TestEqual(TEXT("The instigator resolver provides one target"), TargetingInput.ProvidedActors.Num(), 1);
+	if (TargetingInput.ProvidedActors.Num() == 1)
+	{
+		TestTrue(TEXT("The instigator resolver provides the attacking unit"),
+		         TargetingInput.ProvidedActors[0].Get() == Instigator);
+	}
 
 	int32 Priority = INDEX_NONE;
 	TestFalse(TEXT("An invalid event tag has no trigger priority"),

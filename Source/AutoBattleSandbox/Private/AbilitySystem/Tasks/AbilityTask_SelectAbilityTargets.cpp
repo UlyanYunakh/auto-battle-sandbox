@@ -43,6 +43,15 @@ bool UAbilityTask_SelectAbilityTargets::InitializeFromTaskParameters(const FInst
 	TargetingDefinition = TaskParameters->TargetingDefinition;
 	SelectionInput = FAbilityTargetSelectionInput();
 	SelectionInput.Policy = TaskParameters->InputPolicy;
+	if (const UBattleGameplayAbility* BattleAbility = Cast<UBattleGameplayAbility>(Ability);
+		BattleAbility && BattleAbility->HasActivationTargetingInput())
+	{
+		const FAbilityTargetSelectionInput& ActivationInput = BattleAbility->GetActivationTargetingInput();
+		SelectionInput.ProvidedTargetData = ActivationInput.ProvidedTargetData;
+		SelectionInput.ProvidedActors = ActivationInput.ProvidedActors;
+		return TargetingDefinition != nullptr;
+	}
+
 	SelectionInput.ProvidedTargetData = CachedAbilityContext.TargetData;
 	if (const AActor* ContextTarget = CachedAbilityContext.Target.Get())
 	{

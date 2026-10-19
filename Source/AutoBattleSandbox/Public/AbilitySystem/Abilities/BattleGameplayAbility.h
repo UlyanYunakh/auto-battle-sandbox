@@ -18,6 +18,9 @@ public:
 
 	const TArray<FGlobalGameplayAbilityTrigger>& GetGlobalEventTriggers() const { return GlobalEventTriggers; }
 	const FGlobalGameplayAbilityTrigger* FindGlobalEventTrigger(FGameplayTag EventTag) const;
+	const FGlobalGameplayAbilityTrigger* FindGlobalEventTrigger(
+		FGameplayTag EventTag,
+		const FGlobalGameplayEventFilterContext& FilterContext) const;
 
 	UFUNCTION(BlueprintPure, Category = "Ability|Global Events")
 	bool TryGetGlobalEventTriggerPriority(FGameplayTag EventTag, int32& OutPriority) const;
@@ -33,6 +36,9 @@ public:
 	{
 		return ActivationTargetingInput;
 	}
+
+	UFUNCTION(BlueprintPure, Category = "Ability|Targeting")
+	bool HasActivationTargetingInput() const { return bHasActivationTargetingInput; }
 
 	UFUNCTION(BlueprintPure, Category = "Ability|Targeting")
 	bool GetActivationEventData(FGameplayEventData& OutEventData) const;
@@ -52,12 +58,18 @@ public:
 #endif
 
 protected:
+	virtual void BroadcastGameplayEvent(FGameplayTag EventTag) override;
+
+protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Global Events")
 	TArray<FGlobalGameplayAbilityTrigger> GlobalEventTriggers;
 
 protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Ability|Targeting")
 	FAbilityTargetSelectionInput ActivationTargetingInput;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Ability|Targeting")
+	bool bHasActivationTargetingInput = false;
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "Ability|Targeting")
 	FGameplayEventData ActivationEventData;

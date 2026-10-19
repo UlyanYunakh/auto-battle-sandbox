@@ -14,6 +14,13 @@ UBattleGameplayAbility::UBattleGameplayAbility()
 const FGlobalGameplayAbilityTrigger* UBattleGameplayAbility::FindGlobalEventTrigger(
 	const FGameplayTag EventTag) const
 {
+	return FindGlobalEventTrigger(EventTag, FGlobalGameplayEventFilterContext());
+}
+
+const FGlobalGameplayAbilityTrigger* UBattleGameplayAbility::FindGlobalEventTrigger(
+	const FGameplayTag EventTag,
+	const FGlobalGameplayEventFilterContext& FilterContext) const
+{
 	if (!EventTag.IsValid())
 	{
 		return nullptr;
@@ -22,7 +29,7 @@ const FGlobalGameplayAbilityTrigger* UBattleGameplayAbility::FindGlobalEventTrig
 	const FGlobalGameplayAbilityTrigger* BestTrigger = nullptr;
 	for (const FGlobalGameplayAbilityTrigger& Trigger : GlobalEventTriggers)
 	{
-		if (!Trigger.MatchesEvent(EventTag))
+		if (!Trigger.MatchesEvent(EventTag, FilterContext))
 		{
 			continue;
 		}
@@ -130,9 +137,53 @@ TArray<FActiveGameplayEffectHandle> UBattleGameplayAbility::ApplyGameplayEffectS
 		TargetData);
 }
 
+void UBattleGameplayAbility::BroadcastGameplayEvent(const FGameplayTag EventTag)
+{
+	if (!EventTag.IsValid())
+	{
+		return;
+	}
+
+	const FGameplayAbilityActorInfo* ActorInfo = GetCurrentActorInfo();
+	UBattleAbilitySystem* BattleAbilitySystem = ActorInfo
+		                                            ? Cast<UBattleAbilitySystem>(
+			                                            ActorInfo->AbilitySystemComponent.Get())
+		                                            : nullptr;
+	const FGameplayAbilitySpecHandle AbilityHandle = GetCurrentAbilitySpecHandle();
+	const bool bStartedGlobalEventWait = BattleAbilitySystem
+		&& !IsAbilityFrozen()
+		&& FreezeAbility();
+	if (bStartedGlobalEventWait)
+	{
+		BattleAbilitySystem->SetAbilityWaitingForGlobalEvent(AbilityHandle, true);
+	}
+
+	const FModularGameplayAbilityContext& Context = GetAbilityContext();
+	FGameplayEventData EventData;
+	EventData.EventTag = EventTag;
+	EventData.Instigator = Context.Instigator ? Context.Instigator : Context.Avatar;
+	EventData.Target = Context.Target;
+	EventData.TargetData = Context.TargetData;
+
+	FGlobalGameplayEventDispatch Dispatch;
+	const bool bHasGlobalResponders = BroadcastGlobalGameplayEvent(EventTag, EventData, Dispatch)
+		&& !Dispatch.SequenceTransition.AddedNodeIds.IsEmpty();
+	if (bStartedGlobalEventWait && !bHasGlobalResponders)
+	{
+		BattleAbilitySystem->SetAbilityWaitingForGlobalEvent(AbilityHandle, false);
+		if (IsAbilityFrozen())
+		{
+			ResumeAbility();
+		}
+	}
+
+	Super::BroadcastGameplayEvent(EventTag);
+}
+
 void UBattleGameplayAbility::SetActivationContext(const FBattleAbilityActivationContext& ActivationContext)
 {
 	ActivationTargetingInput = ActivationContext.TargetingInput;
+	bHasActivationTargetingInput = ActivationContext.bHasTargetingInput;
 	ActivationEventData = ActivationContext.EventData;
 	bHasActivationEventData = ActivationContext.bHasEventData;
 }
@@ -145,10 +196,26 @@ EDataValidationResult UBattleGameplayAbility::IsDataValid(FDataValidationContext
 	for (int32 TriggerIndex = 0; TriggerIndex < GlobalEventTriggers.Num(); ++TriggerIndex)
 	{
 		const FGlobalGameplayAbilityTrigger& Trigger = GlobalEventTriggers[TriggerIndex];
-		if (!Trigger.IsValid())
+		if (!Trigger.EventTag.IsValid())
 		{
 			Context.AddError(FText::Format(
 				INVTEXT("Global event trigger at index {0} must have a valid event tag."),
+				TriggerIndex));
+			Result = EDataValidationResult::Invalid;
+			continue;
+		}
+		if (!Trigger.AreFiltersValid())
+		{
+			Context.AddError(FText::Format(
+				INVTEXT("Global event trigger at index {0} contains an invalid event filter."),
+				TriggerIndex));
+			Result = EDataValidationResult::Invalid;
+			continue;
+		}
+		if (!Trigger.IsTargetResolverValid())
+		{
+			Context.AddError(FText::Format(
+				INVTEXT("Global event trigger at index {0} contains an invalid target resolver."),
 				TriggerIndex));
 			Result = EDataValidationResult::Invalid;
 			continue;
@@ -157,7 +224,10 @@ EDataValidationResult UBattleGameplayAbility::IsDataValid(FDataValidationContext
 		for (int32 OtherTriggerIndex = 0; OtherTriggerIndex < TriggerIndex; ++OtherTriggerIndex)
 		{
 			const FGlobalGameplayAbilityTrigger& OtherTrigger = GlobalEventTriggers[OtherTriggerIndex];
-			if (Trigger.EventTag == OtherTrigger.EventTag && Trigger.MatchPolicy == OtherTrigger.MatchPolicy)
+			if (Trigger.Filters.IsEmpty()
+				&& OtherTrigger.Filters.IsEmpty()
+				&& Trigger.EventTag == OtherTrigger.EventTag
+				&& Trigger.MatchPolicy == OtherTrigger.MatchPolicy)
 			{
 				Context.AddError(FText::Format(
 					INVTEXT("Global event trigger at index {0} duplicates trigger {1}."),

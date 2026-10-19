@@ -62,6 +62,7 @@ bool UBattleAbilitySystem::TryActivateAbilityWithTargetingInput(
 
 	FBattleAbilityActivationContext ActivationContext;
 	ActivationContext.TargetingInput = TargetingInput;
+	ActivationContext.bHasTargetingInput = true;
 	PushActivationContext(AbilitySpec->Handle, ActivationContext);
 	const bool bActivated = TryActivateAbility(AbilitySpec->Handle);
 	if (!bActivated)
@@ -189,6 +190,7 @@ void UBattleAbilitySystem::NotifyAbilityEnded(
 	const bool bWasCancelled)
 {
 	Super::NotifyAbilityEnded(Handle, Ability, bWasCancelled);
+	AbilitiesWaitingForGlobalEvent.Remove(Handle);
 	if (UBattleGameplayAbility* BattleAbility = Cast<UBattleGameplayAbility>(Ability))
 	{
 		BattleAbility->SetActivationContext(FBattleAbilityActivationContext());
@@ -273,6 +275,7 @@ void UBattleAbilitySystem::ShutdownSequenceIntegration()
 	PendingSequenceActivations.Reset();
 	LastSequenceIds.Reset();
 	PendingActivationContexts.Reset();
+	AbilitiesWaitingForGlobalEvent.Reset();
 	DeathSequenceId = FAbilitySequenceId();
 	DeathSequenceRootNodeId = FAbilitySequenceNodeId();
 	DeathSequencePhase = EBattleDeathSequencePhase::None;
@@ -317,6 +320,7 @@ void UBattleAbilitySystem::RegisterAbilitySpec(const FGameplayAbilitySpec& Abili
 void UBattleAbilitySystem::UnregisterAbilitySpec(const FGameplayAbilitySpecHandle AbilityHandle)
 {
 	LastSequenceIds.Remove(AbilityHandle);
+	AbilitiesWaitingForGlobalEvent.Remove(AbilityHandle);
 
 	FGlobalGameplayAbilitySubscriptionId SubscriptionId;
 	if (!GlobalEventSubscriptions.RemoveAndCopyValue(AbilityHandle, SubscriptionId))
@@ -359,11 +363,8 @@ void UBattleAbilitySystem::HandleGlobalAbilityActivationRequested(
 	FBattleAbilityActivationContext ActivationContext;
 	ActivationContext.EventData = Request.EventData;
 	ActivationContext.bHasEventData = true;
-	if (AActor* EventTarget = const_cast<AActor*>(Request.EventData.Target.Get()))
-	{
-		ActivationContext.TargetingInput.Policy = EAbilityTargetInputPolicy::RequireProvidedTargets;
-		ActivationContext.TargetingInput.ProvidedActors.Add(EventTarget);
-	}
+	ActivationContext.TargetingInput = Request.TargetingInput;
+	ActivationContext.bHasTargetingInput = true;
 	PushActivationContext(Request.AbilityHandle, ActivationContext);
 	const bool bActivated = TriggerAbilityFromGameplayEvent(
 		Request.AbilityHandle,
@@ -386,11 +387,68 @@ void UBattleAbilitySystem::HandleSequenceNodeStateChanged(
 	const FAbilitySequenceId SequenceId,
 	const FAbilitySequenceNode Node)
 {
+	if (Node.State == EAbilitySequenceNodeState::Active)
+	{
+		ResumeAbilityWaitingForGlobalEvent(SequenceId, Node.NodeId);
+	}
+
 	if (SequenceId == DeathSequenceId
 		&& Node.NodeId == DeathSequenceRootNodeId
 		&& Node.State == EAbilitySequenceNodeState::Active)
 	{
 		ContinueDeathSequence();
+	}
+}
+
+void UBattleAbilitySystem::SetAbilityWaitingForGlobalEvent(
+	const FGameplayAbilitySpecHandle AbilityHandle,
+	const bool bWaiting)
+{
+	if (!AbilityHandle.IsValid())
+	{
+		return;
+	}
+
+	if (bWaiting)
+	{
+		AbilitiesWaitingForGlobalEvent.Add(AbilityHandle);
+	}
+	else
+	{
+		AbilitiesWaitingForGlobalEvent.Remove(AbilityHandle);
+	}
+}
+
+void UBattleAbilitySystem::ResumeAbilityWaitingForGlobalEvent(
+	const FAbilitySequenceId SequenceId,
+	const FAbilitySequenceNodeId NodeId)
+{
+	FGameplayAbilitySpecHandle AbilityHandle;
+	for (const TPair<FGameplayAbilitySpecHandle, FBattleAbilitySequenceActivation>& Pair
+	     : ActiveSequenceActivations)
+	{
+		if (Pair.Value.SequenceId == SequenceId
+			&& Pair.Value.NodeId == NodeId
+			&& AbilitiesWaitingForGlobalEvent.Contains(Pair.Key))
+		{
+			AbilityHandle = Pair.Key;
+			break;
+		}
+	}
+
+	if (!AbilityHandle.IsValid())
+	{
+		return;
+	}
+
+	AbilitiesWaitingForGlobalEvent.Remove(AbilityHandle);
+	FGameplayAbilitySpec* AbilitySpec = FindAbilitySpecFromHandle(AbilityHandle);
+	UBattleGameplayAbility* Ability = AbilitySpec
+		                                  ? Cast<UBattleGameplayAbility>(AbilitySpec->GetPrimaryInstance())
+		                                  : nullptr;
+	if (Ability && Ability->IsAbilityFrozen())
+	{
+		Ability->ResumeAbility();
 	}
 }
 

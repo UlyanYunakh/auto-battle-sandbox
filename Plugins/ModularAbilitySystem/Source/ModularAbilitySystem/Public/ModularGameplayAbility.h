@@ -37,7 +37,8 @@ enum class EModularGameplayAbilityCompletionPolicy : uint8
 enum class EModularGameplayAbilityContinuation : uint8
 {
 	None,
-	CommitAfterPreActivationEvent
+	CommitAfterPreActivationEvent,
+	FinishAfterPostActivationEvent
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAbilityFrozen);
@@ -137,6 +138,8 @@ protected:
 	UFUNCTION(BlueprintNativeEvent, Category = "Ability|Freeze", meta = (DisplayName = "On Ability Resumed"))
 	void OnAbilityResumed();
 
+	virtual void BroadcastGameplayEvent(FGameplayTag EventTag);
+
 protected:
 	UPROPERTY(BlueprintReadOnly, Transient, Category = "Ability|State")
 	EModularGameplayAbilityState AbilityState = EModularGameplayAbilityState::Inactive;
@@ -187,6 +190,7 @@ private:
 	void StartPreActivationTasks();
 	void FinishPreActivationTasks();
 	void ContinueAfterPreActivationEvent();
+	void ContinueAfterPostActivationEvent();
 	void ContinuePendingActivation();
 	void StartActivationTasks();
 	void FinishActivationTasks();
@@ -200,7 +204,6 @@ private:
 		const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayEventData* TriggerEventData);
 	bool IsAbilityContextValid() const;
-	void BroadcastGameplayEvent(FGameplayTag EventTag);
 	void CancelAbilityActivation();
 
 private:

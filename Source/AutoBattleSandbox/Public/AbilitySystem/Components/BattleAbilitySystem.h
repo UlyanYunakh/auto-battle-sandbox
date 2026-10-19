@@ -74,6 +74,8 @@ protected:
 		bool bWasCancelled) override;
 
 private:
+	friend class UBattleGameplayAbility;
+
 	void InitializeSequenceIntegration();
 	void ShutdownSequenceIntegration();
 	void RegisterAbilitySpec(const FGameplayAbilitySpec& AbilitySpec);
@@ -92,6 +94,8 @@ private:
 	void PushActivationContext(
 		FGameplayAbilitySpecHandle AbilityHandle,
 		const FBattleAbilityActivationContext& ActivationContext);
+	void SetAbilityWaitingForGlobalEvent(FGameplayAbilitySpecHandle AbilityHandle, bool bWaiting);
+	void ResumeAbilityWaitingForGlobalEvent(FAbilitySequenceId SequenceId, FAbilitySequenceNodeId NodeId);
 	bool ConsumeActivationContext(
 		FGameplayAbilitySpecHandle AbilityHandle,
 		FBattleAbilityActivationContext& OutActivationContext);
@@ -109,6 +113,7 @@ private:
 	TMap<FGameplayAbilitySpecHandle, FBattleAbilitySequenceActivation> ActiveSequenceActivations;
 	TMap<FGameplayAbilitySpecHandle, FAbilitySequenceId> LastSequenceIds;
 	TMap<FGameplayAbilitySpecHandle, TArray<FBattleAbilityActivationContext>> PendingActivationContexts;
+	TSet<FGameplayAbilitySpecHandle> AbilitiesWaitingForGlobalEvent;
 	FDelegateHandle ActivationRequestDelegateHandle;
 	FAbilitySequenceId DeathSequenceId;
 	FAbilitySequenceNodeId DeathSequenceRootNodeId;

@@ -3,12 +3,21 @@
 #include "CoreMinimal.h"
 #include "Abilities/GameplayAbilityTypes.h"
 #include "AbilitySystem/Sequences/AbilitySequenceTypes.h"
+#include "AbilitySystem/Targeting/AbilityTargetingTypes.h"
 #include "GameplayAbilitySpecHandle.h"
 #include "GameplayTagContainer.h"
+#include "StructUtils/InstancedStruct.h"
 #include "GlobalGameplayEventTypes.generated.h"
 
+class AActor;
 class UBattleAbilitySystem;
 class UBattleGameplayAbility;
+
+struct FGlobalGameplayEventFilterContext
+{
+	const AActor* ListeningActor = nullptr;
+	const FGameplayEventData* EventData = nullptr;
+};
 
 USTRUCT(BlueprintType)
 struct AUTOBATTLESANDBOX_API FGlobalGameplayEventId
@@ -69,6 +78,84 @@ enum class EGlobalGameplayEventMatchPolicy : uint8
 	IncludeChildTags
 };
 
+UENUM(BlueprintType)
+enum class EGlobalGameplayEventParticipant : uint8
+{
+	Instigator,
+	Target
+};
+
+UENUM(BlueprintType)
+enum class EGlobalGameplayEventTeamRelationship : uint8
+{
+	Friendly,
+	Opposing
+};
+
+USTRUCT(BlueprintType, meta = (Hidden))
+struct AUTOBATTLESANDBOX_API FGlobalGameplayEventFilter
+{
+	GENERATED_BODY()
+
+public:
+	virtual ~FGlobalGameplayEventFilter() = default;
+
+	virtual bool Matches(const FGlobalGameplayEventFilterContext& Context) const
+	{
+		return false;
+	}
+};
+
+/** Matches an event participant's team relative to the ability owner receiving the event. */
+USTRUCT(BlueprintType, meta = (DisplayName = "Team Relationship"))
+struct AUTOBATTLESANDBOX_API FGlobalGameplayEventTeamFilter : public FGlobalGameplayEventFilter
+{
+	GENERATED_BODY()
+
+public:
+	virtual bool Matches(const FGlobalGameplayEventFilterContext& Context) const override;
+
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Global Gameplay Event")
+	EGlobalGameplayEventParticipant Participant = EGlobalGameplayEventParticipant::Instigator;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Global Gameplay Event")
+	EGlobalGameplayEventTeamRelationship Relationship = EGlobalGameplayEventTeamRelationship::Friendly;
+};
+
+USTRUCT(BlueprintType, meta = (Hidden))
+struct AUTOBATTLESANDBOX_API FGlobalGameplayEventTargetResolver
+{
+	GENERATED_BODY()
+
+public:
+	virtual ~FGlobalGameplayEventTargetResolver() = default;
+
+	virtual bool Resolve(
+		const FGlobalGameplayEventFilterContext& Context,
+		FAbilityTargetSelectionInput& OutTargetingInput) const
+	{
+		return false;
+	}
+};
+
+/** Uses the event instigator or event target as the triggered ability's provided target. */
+USTRUCT(BlueprintType, meta = (DisplayName = "Event Participant"))
+struct AUTOBATTLESANDBOX_API FGlobalGameplayEventParticipantTargetResolver
+	: public FGlobalGameplayEventTargetResolver
+{
+	GENERATED_BODY()
+
+public:
+	virtual bool Resolve(
+		const FGlobalGameplayEventFilterContext& Context,
+		FAbilityTargetSelectionInput& OutTargetingInput) const override;
+
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Global Gameplay Event")
+	EGlobalGameplayEventParticipant Participant = EGlobalGameplayEventParticipant::Target;
+};
+
 /** Describes one global event that can trigger a granted battle ability. */
 USTRUCT(BlueprintType)
 struct AUTOBATTLESANDBOX_API FGlobalGameplayAbilityTrigger
@@ -76,8 +163,16 @@ struct AUTOBATTLESANDBOX_API FGlobalGameplayAbilityTrigger
 	GENERATED_BODY()
 
 public:
-	bool IsValid() const { return EventTag.IsValid(); }
+	bool IsValid() const;
+	bool AreFiltersValid() const;
+	bool IsTargetResolverValid() const;
+	bool ResolveTargetingInput(
+		const FGlobalGameplayEventFilterContext& Context,
+		FAbilityTargetSelectionInput& OutTargetingInput) const;
 	bool MatchesEvent(FGameplayTag BroadcastEventTag) const;
+	bool MatchesEvent(
+		FGameplayTag BroadcastEventTag,
+		const FGlobalGameplayEventFilterContext& FilterContext) const;
 
 public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Global Gameplay Event")
@@ -85,6 +180,14 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Global Gameplay Event")
 	EGlobalGameplayEventMatchPolicy MatchPolicy = EGlobalGameplayEventMatchPolicy::Exact;
+
+	/** Every configured filter must match. Use multiple trigger entries to express alternatives. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Global Gameplay Event", meta = (ExcludeBaseStruct))
+	TArray<TInstancedStruct<FGlobalGameplayEventFilter>> Filters;
+
+	/** Chooses what the triggered ability targets. If unset, the event target is used. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Global Gameplay Event", meta = (ExcludeBaseStruct))
+	TInstancedStruct<FGlobalGameplayEventTargetResolver> TargetResolver;
 
 	/** Higher-priority responders execute before lower-priority responders. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Global Gameplay Event")
@@ -147,4 +250,7 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Global Gameplay Event")
 	FGameplayEventData EventData;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Global Gameplay Event")
+	FAbilityTargetSelectionInput TargetingInput;
 };

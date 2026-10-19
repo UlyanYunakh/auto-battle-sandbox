@@ -178,6 +178,9 @@ public:
 	FAbilityTargetSelectionInput TargetingInput;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ability Targeting")
+	bool bHasTargetingInput = false;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ability Targeting")
 	FGameplayEventData EventData;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Ability Targeting")

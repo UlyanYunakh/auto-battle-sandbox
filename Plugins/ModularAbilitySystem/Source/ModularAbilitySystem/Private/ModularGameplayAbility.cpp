@@ -282,6 +282,9 @@ void UModularGameplayAbility::ContinuePendingActivation()
 	case EModularGameplayAbilityContinuation::CommitAfterPreActivationEvent:
 		ContinueAfterPreActivationEvent();
 		break;
+	case EModularGameplayAbilityContinuation::FinishAfterPostActivationEvent:
+		ContinueAfterPostActivationEvent();
+		break;
 	case EModularGameplayAbilityContinuation::None:
 	default:
 		break;
@@ -303,6 +306,17 @@ void UModularGameplayAbility::FinishActivationTasks()
 		BroadcastGameplayEvent(PostActivationEventTag);
 	}
 
+	if (IsAbilityFrozen())
+	{
+		PendingContinuation = EModularGameplayAbilityContinuation::FinishAfterPostActivationEvent;
+		return;
+	}
+
+	ContinueAfterPostActivationEvent();
+}
+
+void UModularGameplayAbility::ContinueAfterPostActivationEvent()
+{
 	if (CompletionPolicy == EModularGameplayAbilityCompletionPolicy::EndAbility)
 	{
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, false);
@@ -462,7 +476,14 @@ void UModularGameplayAbility::BroadcastGameplayEvent(const FGameplayTag EventTag
 		return;
 	}
 
-	AbilitySystemComponent->HandleGameplayEvent(EventTag, nullptr);
+	FGameplayEventData EventData;
+	EventData.EventTag = EventTag;
+	EventData.Instigator = AbilityContext.Instigator
+		                       ? AbilityContext.Instigator
+		                       : AbilityContext.Avatar;
+	EventData.Target = AbilityContext.Target;
+	EventData.TargetData = AbilityContext.TargetData;
+	AbilitySystemComponent->HandleGameplayEvent(EventTag, &EventData);
 }
 
 void UModularGameplayAbility::CancelAbilityActivation()

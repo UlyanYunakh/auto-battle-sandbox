@@ -28,6 +28,7 @@ struct FRegisteredGlobalGameplayAbilitySubscription
 struct FResolvedGlobalGameplayAbilitySubscription
 {
 	FGlobalGameplayAbilitySubscriptionId SubscriptionId;
+	FAbilityTargetSelectionInput TargetingInput;
 	int32 Priority = 0;
 };
 
@@ -87,7 +88,9 @@ private:
 
 	FGlobalGameplayEventId AllocateEventId();
 	FGlobalGameplayAbilitySubscriptionId AllocateSubscriptionId();
-	TArray<FResolvedGlobalGameplayAbilitySubscription> ResolveSubscriptions(FGameplayTag EventTag);
+	TArray<FResolvedGlobalGameplayAbilitySubscription> ResolveSubscriptions(
+		FGameplayTag EventTag,
+		const FGameplayEventData& EventData);
 	void RequestActivationForNode(FAbilitySequenceId SequenceId, FAbilitySequenceNodeId NodeId);
 	void RemovePendingActivation(FAbilitySequenceId SequenceId, FAbilitySequenceNodeId NodeId);
 	void InvalidatePendingActivations(FGlobalGameplayAbilitySubscriptionId SubscriptionId);
@@ -96,7 +99,7 @@ private:
 	TWeakObjectPtr<UAutoBattleAbilitySequenceSubsystem> SequenceSubsystem;
 	TMap<FGlobalGameplayAbilitySubscriptionId, FRegisteredGlobalGameplayAbilitySubscription> Subscriptions;
 	TMap<FAbilitySequenceId, TMap<FAbilitySequenceNodeId, FPendingGlobalGameplayAbilityActivation>>
-		PendingActivations;
+	PendingActivations;
 	FGlobalGameplayAbilityActivationRequestedSignature AbilityActivationRequested;
 	int64 NextEventValue = 1;
 	int64 NextSubscriptionValue = 1;

@@ -152,8 +152,10 @@ bool UAutoBattleGlobalGameplayEventSubsystem::BroadcastGlobalEvent(
 	OutDispatch.SequenceId = SequenceId;
 	OutDispatch.SourceNodeId = SourceNodeId;
 
+	FGameplayEventData RoutedEventData = EventData;
+	RoutedEventData.EventTag = EventTag;
 	const TArray<FResolvedGlobalGameplayAbilitySubscription> ResolvedSubscriptions =
-		ResolveSubscriptions(EventTag);
+		ResolveSubscriptions(EventTag, RoutedEventData);
 	for (const FResolvedGlobalGameplayAbilitySubscription& ResolvedSubscription : ResolvedSubscriptions)
 	{
 		OutDispatch.MatchingSubscriptions.Add(ResolvedSubscription.SubscriptionId);
@@ -189,8 +191,6 @@ bool UAutoBattleGlobalGameplayEventSubsystem::BroadcastGlobalEvent(
 		return false;
 	}
 
-	FGameplayEventData RoutedEventData = EventData;
-	RoutedEventData.EventTag = EventTag;
 	TMap<FAbilitySequenceNodeId, FPendingGlobalGameplayAbilityActivation>& SequencePendingActivations =
 		PendingActivations.FindOrAdd(SequenceId);
 
@@ -213,6 +213,7 @@ bool UAutoBattleGlobalGameplayEventSubsystem::BroadcastGlobalEvent(
 		PendingActivation.Request.SequenceId = SequenceId;
 		PendingActivation.Request.NodeId = OutDispatch.SequenceTransition.AddedNodeIds[Index];
 		PendingActivation.Request.EventData = RoutedEventData;
+		PendingActivation.Request.TargetingInput = ResolvedSubscription.TargetingInput;
 		SequencePendingActivations.Add(PendingActivation.Request.NodeId, MoveTemp(PendingActivation));
 	}
 
@@ -278,7 +279,9 @@ FGlobalGameplayAbilitySubscriptionId UAutoBattleGlobalGameplayEventSubsystem::Al
 }
 
 TArray<FResolvedGlobalGameplayAbilitySubscription>
-UAutoBattleGlobalGameplayEventSubsystem::ResolveSubscriptions(const FGameplayTag EventTag)
+UAutoBattleGlobalGameplayEventSubsystem::ResolveSubscriptions(
+	const FGameplayTag EventTag,
+	const FGameplayEventData& EventData)
 {
 	TArray<FResolvedGlobalGameplayAbilitySubscription> ResolvedSubscriptions;
 	TArray<FGlobalGameplayAbilitySubscriptionId> StaleSubscriptionIds;
@@ -299,8 +302,17 @@ UAutoBattleGlobalGameplayEventSubsystem::ResolveSubscriptions(const FGameplayTag
 			continue;
 		}
 
+		const AActor* ListeningActor = AbilitySystem->GetAvatarActor();
+		if (!ListeningActor)
+		{
+			ListeningActor = AbilitySystem->GetOwner();
+		}
+
+		FGlobalGameplayEventFilterContext FilterContext;
+		FilterContext.ListeningActor = ListeningActor;
+		FilterContext.EventData = &EventData;
 		const FGlobalGameplayAbilityTrigger* MatchingTrigger =
-			AbilityDefaultObject->FindGlobalEventTrigger(EventTag);
+			AbilityDefaultObject->FindGlobalEventTrigger(EventTag, FilterContext);
 		if (!MatchingTrigger)
 		{
 			continue;
@@ -310,6 +322,7 @@ UAutoBattleGlobalGameplayEventSubsystem::ResolveSubscriptions(const FGameplayTag
 			ResolvedSubscriptions.AddDefaulted_GetRef();
 		ResolvedSubscription.SubscriptionId = Pair.Key;
 		ResolvedSubscription.Priority = MatchingTrigger->Priority;
+		MatchingTrigger->ResolveTargetingInput(FilterContext, ResolvedSubscription.TargetingInput);
 	}
 
 	for (const FGlobalGameplayAbilitySubscriptionId StaleSubscriptionId : StaleSubscriptionIds)
