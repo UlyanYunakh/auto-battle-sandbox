@@ -10,7 +10,7 @@ public class AutoBattleSandbox : ModuleRules
 
 		PublicDependencyModuleNames.AddRange([
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "ModularAbilitySystem", "GameplayAbilities",
-			"GameplayTags", "GameplayTasks", "StructUtils", "AdvancedMVVM", "ModelViewViewModel", "UMG"
+			"GameplayTags", "GameplayTasks", "StructUtils", "AdvancedMVVM", "ModelViewViewModel", "Niagara", "UMG"
 		]);
 
 		PrivateDependencyModuleNames.AddRange([]);
