@@ -95,6 +95,17 @@ bool AUnitActor::IsAlive() const
 	return DefensiveAttributeSet && DefensiveAttributeSet->GetHealth() > 0.0f;
 }
 
+void AUnitActor::SetSelected(const bool bSelected)
+{
+	if (bIsSelected == bSelected)
+	{
+		return;
+	}
+
+	bIsSelected = bSelected;
+	UpdateSelectionHighlight(bIsSelected);
+}
+
 void AUnitActor::StartDeathAnimation()
 {
 	if (bDeathAnimationPlaying || IsActorBeingDestroyed())

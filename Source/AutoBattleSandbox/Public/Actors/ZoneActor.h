@@ -10,6 +10,7 @@
 class UBattleAbilitySystem;
 class UBoxComponent;
 class UChildActorComponent;
+class AAutoBattleSandboxPlayerController;
 class AZoneActor;
 class AUnitActor;
 
@@ -154,9 +155,11 @@ protected:
 	float LayoutAnimationDuration = 0.25f;
 
 private:
+	friend class AAutoBattleSandboxPlayerController;
 	friend class AUnitActor;
 
 	bool RemoveUnitInternal(AUnitActor* UnitActor);
+	bool RestoreUnitAfterRearrangement(AUnitActor* UnitActor, int32 SlotIndex);
 
 private:
 	UPROPERTY(BlueprintReadOnly, Category = "Zone", meta = (AllowPrivateAccess = "true"))

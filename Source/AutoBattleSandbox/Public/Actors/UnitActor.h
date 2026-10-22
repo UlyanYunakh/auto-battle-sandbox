@@ -75,6 +75,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Unit")
 	AZoneActor* GetOwningZone() const { return OwningZone; }
 
+	UFUNCTION(BlueprintCallable, Category = "Unit|Selection")
+	void SetSelected(bool bSelected);
+
+	UFUNCTION(BlueprintPure, Category = "Unit|Selection")
+	bool IsSelected() const { return bIsSelected; }
+
 	virtual void Tick(float DeltaTime) override;
 
 public:
@@ -84,6 +90,9 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Unit|Selection")
+	void UpdateSelectionHighlight(bool bHighlighted);
 
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess))
@@ -106,6 +115,9 @@ protected:
 
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Unit")
 	TObjectPtr<AZoneActor> OwningZone = nullptr;
+
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Unit|Selection")
+	bool bIsSelected = false;
 
 private:
 	friend class AZoneActor;

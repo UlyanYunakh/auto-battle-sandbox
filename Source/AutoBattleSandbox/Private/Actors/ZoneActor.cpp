@@ -133,6 +133,36 @@ bool AZoneActor::RemoveUnitInternal(AUnitActor* UnitActor)
 	return true;
 }
 
+bool AZoneActor::RestoreUnitAfterRearrangement(AUnitActor* UnitActor, const int32 SlotIndex)
+{
+	if (!IsValid(UnitActor))
+	{
+		return false;
+	}
+
+	if (ContainsUnit(UnitActor))
+	{
+		return true;
+	}
+	if (UnitActor->GetOwningZone() && UnitActor->GetOwningZone() != this)
+	{
+		return false;
+	}
+
+	if (PreviewActor == UnitActor)
+	{
+		PreviewActor = nullptr;
+		PreviewSlotIndex = INDEX_NONE;
+		OnPreviewUnitChanged.Broadcast(this, nullptr, INDEX_NONE);
+	}
+
+	UnitActors.Insert(UnitActor, FMath::Clamp(SlotIndex, 0, UnitActors.Num()));
+	UnitActor->SetOwningZone(this);
+	OnUnitAdded.Broadcast(this, UnitActor);
+	RefreshUnitLayout(bAnimateLayoutChanges);
+	return true;
+}
+
 bool AZoneActor::ContainsUnit(const AUnitActor* UnitActor) const
 {
 	return IsValid(UnitActor) && UnitActors.Contains(UnitActor);
