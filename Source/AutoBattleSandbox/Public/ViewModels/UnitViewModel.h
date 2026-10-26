@@ -8,9 +8,15 @@
 #include "UnitViewModel.generated.h"
 
 struct FOnAttributeChangeData;
+class UBattleGameplayAbility;
 class UTexture2D;
 class UUnitAsset;
 class AUnitActor;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FOnViewModelNonAttackAbilityActivated,
+	UBattleGameplayAbility*,
+	Ability);
 
 USTRUCT(BlueprintType)
 struct AUTOBATTLESANDBOX_API FUnitViewModelProperties : public FDefaultViewModelProperty
@@ -47,6 +53,19 @@ public:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Unit")
 	TSoftObjectPtr<UTexture2D> UnitArt;
 
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Ability")
+	TSoftObjectPtr<UTexture2D> AbilityIcon;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Ability")
+	FText AbilityText;
+
+	/** Changes on every non-attack ability activation so MVVM View Binding can react to the event. */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Ability")
+	int32 NonAttackAbilityActivationSerial = 0;
+
+	UPROPERTY(BlueprintAssignable, Category = "Ability")
+	FOnViewModelNonAttackAbilityActivated OnNonAttackAbilityActivated;
+
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Attributes")
 	float Health = 0.0f;
 
@@ -74,6 +93,10 @@ protected:
 private:
 	void SetUnitName(const FText& InUnitName);
 	void SetUnitArt(const TSoftObjectPtr<UTexture2D>& InUnitArt);
+	void SetAbilityPresentation(TSubclassOf<UBattleGameplayAbility> InAbilityClass);
+	void SetAbilityIcon(const TSoftObjectPtr<UTexture2D>& InAbilityIcon);
+	void SetAbilityText(const FText& InAbilityText);
+	void AdvanceNonAttackAbilityActivationSerial();
 	void SetHealth(float InHealth);
 	void SetAttack(float InAttack);
 	void SetArmor(float InArmor);
@@ -84,9 +107,14 @@ private:
 	void HandleArmorChanged(const FOnAttributeChangeData& Data);
 	void BindUnitInitializedDelegate();
 	void UnbindUnitInitializedDelegate();
+	void BindAbilityActivatedDelegate();
+	void UnbindAbilityActivatedDelegate();
 
 	UFUNCTION()
 	void HandleUnitInitialized();
+
+	UFUNCTION()
+	void HandleNonAttackAbilityActivated(UBattleGameplayAbility* Ability);
 
 	void ClearUnit();
 

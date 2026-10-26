@@ -12,12 +12,18 @@ class UBattleAbilitySystem;
 class UBattleGameplayAbility;
 class UAbilityTask_ApplyGameplayEffectWithAttackAnimation;
 class UDefensiveAttributeSet;
+class UGameplayAbility;
 class UOffensiveAttributeSet;
 class UTexture2D;
 class UUnitAsset;
 class AZoneActor;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnUnitInitialized);
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
+	FOnUnitNonAttackAbilityActivated,
+	UBattleGameplayAbility*,
+	Ability);
 
 UCLASS()
 class AUTOBATTLESANDBOX_API AUnitActor : public AActor
@@ -87,12 +93,18 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Unit")
 	FOnUnitInitialized OnInitialized;
 
+	UPROPERTY(BlueprintAssignable, Category = "Unit|Ability")
+	FOnUnitNonAttackAbilityActivated OnNonAttackAbilityActivated;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "Unit|Selection")
 	void UpdateSelectionHighlight(bool bHighlighted);
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Unit|Ability")
+	void PlayNonAttackAbilityActivationFeedback(UBattleGameplayAbility* Ability);
 
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess))
@@ -131,10 +143,12 @@ private:
 		const FVector& TargetPosition);
 	void ClearAttackAnimationTask(const UAbilityTask_ApplyGameplayEffectWithAttackAnimation* AttackTask);
 	void SetOwningZone(AZoneActor* ZoneActor) { OwningZone = ZoneActor; }
+	void HandleAbilityActivated(UGameplayAbility* ActivatedAbility);
 
 private:
 	TArray<FGameplayAbilitySpecHandle> GrantedAbilityHandles;
 	FGameplayTagContainer AppliedInitialGameplayTags;
 	TWeakObjectPtr<UAbilityTask_ApplyGameplayEffectWithAttackAnimation> ActiveAttackAnimationTask;
+	FDelegateHandle AbilityActivatedHandle;
 	bool bDeathAnimationPlaying = false;
 };

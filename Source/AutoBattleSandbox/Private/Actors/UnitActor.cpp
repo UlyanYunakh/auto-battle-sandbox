@@ -205,6 +205,13 @@ void AUnitActor::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (UnitAbilitySystem && !AbilityActivatedHandle.IsValid())
+	{
+		AbilityActivatedHandle = UnitAbilitySystem->AbilityActivatedCallbacks.AddUObject(
+			this,
+			&ThisClass::HandleAbilityActivated);
+	}
+
 	if (UWorld* World = GetWorld())
 	{
 		if (UAbilityTargetingSubsystem* TargetingSubsystem = World->GetSubsystem<UAbilityTargetingSubsystem>())
@@ -216,6 +223,12 @@ void AUnitActor::BeginPlay()
 
 void AUnitActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (UnitAbilitySystem && AbilityActivatedHandle.IsValid())
+	{
+		UnitAbilitySystem->AbilityActivatedCallbacks.Remove(AbilityActivatedHandle);
+		AbilityActivatedHandle.Reset();
+	}
+
 	if (UWorld* World = GetWorld())
 	{
 		if (UAbilityTargetingSubsystem* TargetingSubsystem = World->GetSubsystem<UAbilityTargetingSubsystem>())
@@ -241,6 +254,18 @@ void AUnitActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void AUnitActor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+}
+
+void AUnitActor::HandleAbilityActivated(UGameplayAbility* ActivatedAbility)
+{
+	UBattleGameplayAbility* BattleAbility = Cast<UBattleGameplayAbility>(ActivatedAbility);
+	if (!BattleAbility || BattleAbility->GetClass() == BasicAttackAbility)
+	{
+		return;
+	}
+
+	PlayNonAttackAbilityActivationFeedback(BattleAbility);
+	OnNonAttackAbilityActivated.Broadcast(BattleAbility);
 }
 
 void AUnitActor::GrantUnitAbilities(const UUnitAsset& UnitDataAsset)

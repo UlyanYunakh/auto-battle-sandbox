@@ -2,12 +2,14 @@
 
 #include "ViewModels/UnitViewModel.h"
 
+#include "AbilitySystem/Abilities/BattleGameplayAbility.h"
 #include "AbilitySystem/AttributeSet/DefensiveAttributeSet.h"
 #include "AbilitySystem/AttributeSet/OffensiveAttributeSet.h"
 #include "AbilitySystem/Components/BattleAbilitySystem.h"
 #include "AbilitySystemComponent.h"
 #include "Actors/UnitActor.h"
 #include "DataAssets/UnitAsset.h"
+#include "GameplayAbilitySpec.h"
 
 namespace
 {
@@ -15,12 +17,29 @@ namespace
 	{
 		return FText::AsNumber(Value);
 	}
+
+	TSubclassOf<UBattleGameplayAbility> FindFirstNonAttackAbility(
+		const UBattleAbilitySystem& AbilitySystem,
+		const TSubclassOf<UBattleGameplayAbility> BasicAttackAbility)
+	{
+		for (const FGameplayAbilitySpec& AbilitySpec : AbilitySystem.GetActivatableAbilities())
+		{
+			if (const UBattleGameplayAbility* Ability = Cast<UBattleGameplayAbility>(AbilitySpec.Ability);
+				Ability && Ability->GetClass() != BasicAttackAbility)
+			{
+				return Ability->GetClass();
+			}
+		}
+
+		return nullptr;
+	}
 }
 
 void UUnitViewModel::SetUnitActor(AUnitActor* InUnitActor)
 {
 	UnbindAttributeChangeDelegates();
 	UnbindUnitInitializedDelegate();
+	UnbindAbilityActivatedDelegate();
 
 	UnitActor = InUnitActor;
 
@@ -31,6 +50,7 @@ void UUnitViewModel::SetUnitActor(AUnitActor* InUnitActor)
 	}
 
 	BindUnitInitializedDelegate();
+	BindAbilityActivatedDelegate();
 	RefreshFromUnitActor();
 	BindAttributeChangeDelegates();
 }
@@ -39,6 +59,7 @@ void UUnitViewModel::InitializeFromAsset(const UUnitAsset* InUnitAsset)
 {
 	UnbindAttributeChangeDelegates();
 	UnbindUnitInitializedDelegate();
+	UnbindAbilityActivatedDelegate();
 	UnitActor = nullptr;
 
 	if (InUnitAsset == nullptr)
@@ -49,6 +70,7 @@ void UUnitViewModel::InitializeFromAsset(const UUnitAsset* InUnitAsset)
 
 	SetUnitName(InUnitAsset->UnitName);
 	SetUnitArt(InUnitAsset->UnitArt);
+	SetAbilityPresentation(InUnitAsset->Abilities.IsValidIndex(0) ? InUnitAsset->Abilities[0] : nullptr);
 	SetHealth(InUnitAsset->Health);
 	SetAttack(InUnitAsset->Attack);
 	SetArmor(InUnitAsset->Armor);
@@ -68,6 +90,7 @@ void UUnitViewModel::ViewModelClear()
 {
 	UnbindAttributeChangeDelegates();
 	UnbindUnitInitializedDelegate();
+	UnbindAbilityActivatedDelegate();
 	UnitActor = nullptr;
 
 	Super::ViewModelClear();
@@ -96,6 +119,33 @@ void UUnitViewModel::SetUnitName(const FText& InUnitName)
 void UUnitViewModel::SetUnitArt(const TSoftObjectPtr<UTexture2D>& InUnitArt)
 {
 	UE_MVVM_SET_PROPERTY_VALUE(UnitArt, InUnitArt);
+}
+
+void UUnitViewModel::SetAbilityPresentation(const TSubclassOf<UBattleGameplayAbility> InAbilityClass)
+{
+	const UBattleGameplayAbility* Ability = InAbilityClass
+		                                        ? InAbilityClass->GetDefaultObject<UBattleGameplayAbility>()
+		                                        : nullptr;
+	SetAbilityIcon(Ability ? Ability->AbilityIcon : nullptr);
+	SetAbilityText(Ability ? Ability->AbilityText : FText::GetEmpty());
+}
+
+void UUnitViewModel::SetAbilityIcon(const TSoftObjectPtr<UTexture2D>& InAbilityIcon)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(AbilityIcon, InAbilityIcon);
+}
+
+void UUnitViewModel::SetAbilityText(const FText& InAbilityText)
+{
+	UE_MVVM_SET_PROPERTY_VALUE(AbilityText, InAbilityText);
+}
+
+void UUnitViewModel::AdvanceNonAttackAbilityActivationSerial()
+{
+	const int32 NextSerial = NonAttackAbilityActivationSerial == MAX_int32
+		                         ? 1
+		                         : NonAttackAbilityActivationSerial + 1;
+	UE_MVVM_SET_PROPERTY_VALUE(NonAttackAbilityActivationSerial, NextSerial);
 }
 
 void UUnitViewModel::SetHealth(const float InHealth)
@@ -130,12 +180,14 @@ void UUnitViewModel::RefreshFromUnitActor()
 	const UBattleAbilitySystem* UnitAbilitySystem = UnitActor->GetUnitAbilitySystem();
 	if (UnitAbilitySystem == nullptr)
 	{
+		SetAbilityPresentation(nullptr);
 		SetHealth(0.0f);
 		SetAttack(0.0f);
 		SetArmor(0.0f);
 		return;
 	}
 
+	SetAbilityPresentation(FindFirstNonAttackAbility(*UnitAbilitySystem, UnitActor->GetBasicAttackAbility()));
 	SetHealth(UnitAbilitySystem->GetNumericAttribute(UDefensiveAttributeSet::GetHealthAttribute()));
 	SetAttack(UnitAbilitySystem->GetNumericAttribute(UOffensiveAttributeSet::GetAttackAttribute()));
 	SetArmor(UnitAbilitySystem->GetNumericAttribute(UDefensiveAttributeSet::GetArmorAttribute()));
@@ -224,15 +276,48 @@ void UUnitViewModel::UnbindUnitInitializedDelegate()
 	}
 }
 
+void UUnitViewModel::BindAbilityActivatedDelegate()
+{
+	if (UnitActor != nullptr)
+	{
+		UnitActor->OnNonAttackAbilityActivated.AddUniqueDynamic(
+			this,
+			&ThisClass::HandleNonAttackAbilityActivated);
+	}
+}
+
+void UUnitViewModel::UnbindAbilityActivatedDelegate()
+{
+	if (UnitActor != nullptr)
+	{
+		UnitActor->OnNonAttackAbilityActivated.RemoveDynamic(
+			this,
+			&ThisClass::HandleNonAttackAbilityActivated);
+	}
+}
+
 void UUnitViewModel::HandleUnitInitialized()
 {
 	RefreshFromUnitActor();
+}
+
+void UUnitViewModel::HandleNonAttackAbilityActivated(UBattleGameplayAbility* Ability)
+{
+	if (Ability == nullptr)
+	{
+		return;
+	}
+
+	SetAbilityPresentation(Ability->GetClass());
+	AdvanceNonAttackAbilityActivationSerial();
+	OnNonAttackAbilityActivated.Broadcast(Ability);
 }
 
 void UUnitViewModel::ClearUnit()
 {
 	SetUnitName(FText::GetEmpty());
 	SetUnitArt(nullptr);
+	SetAbilityPresentation(nullptr);
 	SetHealth(0.0f);
 	SetAttack(0.0f);
 	SetArmor(0.0f);

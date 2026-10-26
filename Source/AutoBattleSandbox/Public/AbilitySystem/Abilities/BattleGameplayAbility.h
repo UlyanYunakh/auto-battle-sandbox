@@ -7,6 +7,8 @@
 #include "ModularGameplayAbility.h"
 #include "BattleGameplayAbility.generated.h"
 
+class UTexture2D;
+
 /** Project-level gameplay ability base that participates in global event sequences. */
 UCLASS(BlueprintType, Blueprintable)
 class AUTOBATTLESANDBOX_API UBattleGameplayAbility : public UModularGameplayAbility
@@ -56,6 +58,13 @@ public:
 #if WITH_EDITOR
 	virtual EDataValidationResult IsDataValid(FDataValidationContext& Context) const override;
 #endif
+
+public:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability|Presentation")
+	TSoftObjectPtr<UTexture2D> AbilityIcon;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability|Presentation", meta = (MultiLine = true))
+	FText AbilityText;
 
 protected:
 	virtual void BroadcastGameplayEvent(FGameplayTag EventTag) override;
