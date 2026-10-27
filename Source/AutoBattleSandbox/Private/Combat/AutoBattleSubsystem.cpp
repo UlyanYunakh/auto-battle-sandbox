@@ -2,9 +2,11 @@
 
 #include "AbilitySystem/Abilities/BattleGameplayAbility.h"
 #include "AbilitySystem/Components/BattleAbilitySystem.h"
+#include "AbilitySystem/Events/GlobalGameplayEventSubsystem.h"
 #include "AbilitySystem/Sequences/AbilitySequenceSubsystem.h"
 #include "Actors/UnitActor.h"
 #include "Actors/ZoneActor.h"
+#include "Combat/AutoBattleGameplayTags.h"
 #include "Combat/AutoBattleRulesAsset.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -57,7 +59,7 @@ bool UAutoBattleSubsystem::StartBattle(
 	}
 
 	OnBattleStarted.Broadcast(TeamAZone, TeamBZone);
-	BeginRound();
+	StartBattleEvent();
 	return true;
 }
 
@@ -476,6 +478,17 @@ void UAutoBattleSubsystem::FinishBattle(
 	AZoneActor* WinningTeam,
 	const bool bBroadcast)
 {
+	const FAbilitySequenceId SequenceToCancel = BattleStartSequenceId;
+	BattleStartSequenceId = FAbilitySequenceId();
+	BattleStartRootNodeId = FAbilitySequenceNodeId();
+	if (UAutoBattleAbilitySequenceSubsystem* SequenceSubsystemInstance = SequenceSubsystem.Get();
+		SequenceSubsystemInstance && SequenceToCancel.IsValid()
+		&& SequenceSubsystemInstance->IsSequenceRunning(SequenceToCancel))
+	{
+		TArray<FAbilitySequenceNodeId> IgnoredNodesToCancel;
+		SequenceSubsystemInstance->CancelSequence(SequenceToCancel, IgnoredNodesToCancel);
+	}
+
 	if (TeamAZone)
 	{
 		TeamAZone->SetBattleLocked(false);
@@ -511,10 +524,75 @@ void UAutoBattleSubsystem::FinishBattle(
 	SequenceSubsystem.Reset();
 }
 
+void UAutoBattleSubsystem::StartBattleEvent()
+{
+	UAutoBattleAbilitySequenceSubsystem* SequenceSubsystemInstance = SequenceSubsystem.Get();
+	UWorld* World = GetWorld();
+	UAutoBattleGlobalGameplayEventSubsystem* GlobalEventSubsystem = World
+		                                                                ? World->GetSubsystem<
+			                                                                UAutoBattleGlobalGameplayEventSubsystem>()
+		                                                                : nullptr;
+	if (!SequenceSubsystemInstance || !GlobalEventSubsystem)
+	{
+		BeginRound();
+		return;
+	}
+
+	FAbilitySequenceNodeRequest RootRequest;
+	RootRequest.DebugName = TEXT("BattleStart");
+	if (!SequenceSubsystemInstance->StartSequence(
+		RootRequest,
+		BattleStartSequenceId,
+		BattleStartRootNodeId))
+	{
+		BeginRound();
+		return;
+	}
+
+	FGlobalGameplayEventDispatch Dispatch;
+	if (!GlobalEventSubsystem->BroadcastGlobalEvent(
+			BattleStartSequenceId,
+			BattleStartRootNodeId,
+			AutoBattleGameplayTags::Battle_Event_Start,
+			FGameplayEventData(),
+			Dispatch)
+		|| Dispatch.SequenceTransition.AddedNodeIds.IsEmpty())
+	{
+		CompleteBattleStartEvent();
+	}
+}
+
+void UAutoBattleSubsystem::CompleteBattleStartEvent()
+{
+	const FAbilitySequenceId CompletedSequenceId = BattleStartSequenceId;
+	const FAbilitySequenceNodeId CompletedRootNodeId = BattleStartRootNodeId;
+	BattleStartSequenceId = FAbilitySequenceId();
+	BattleStartRootNodeId = FAbilitySequenceNodeId();
+
+	if (UAutoBattleAbilitySequenceSubsystem* SequenceSubsystemInstance = SequenceSubsystem.Get();
+		SequenceSubsystemInstance && CompletedSequenceId.IsValid() && CompletedRootNodeId.IsValid())
+	{
+		FAbilitySequenceTransition IgnoredTransition;
+		SequenceSubsystemInstance->FinishNode(
+			CompletedSequenceId,
+			CompletedRootNodeId,
+			EAbilitySequenceNodeResult::Succeeded,
+			IgnoredTransition);
+	}
+
+	if (IsBattleRunning() && BattleState == EAutoBattleState::Preparing)
+	{
+		BeginRound();
+	}
+}
+
 void UAutoBattleSubsystem::BindSequenceEvents()
 {
 	if (UAutoBattleAbilitySequenceSubsystem* SequenceSubsystemInstance = SequenceSubsystem.Get())
 	{
+		SequenceSubsystemInstance->OnSequenceNodeStateChanged.AddUniqueDynamic(
+			this,
+			&ThisClass::HandleSequenceNodeStateChanged);
 		SequenceSubsystemInstance->OnSequenceFinished.AddUniqueDynamic(this, &ThisClass::HandleSequenceFinished);
 	}
 }
@@ -523,6 +601,9 @@ void UAutoBattleSubsystem::UnbindSequenceEvents()
 {
 	if (UAutoBattleAbilitySequenceSubsystem* SequenceSubsystemInstance = SequenceSubsystem.Get())
 	{
+		SequenceSubsystemInstance->OnSequenceNodeStateChanged.RemoveDynamic(
+			this,
+			&ThisClass::HandleSequenceNodeStateChanged);
 		SequenceSubsystemInstance->OnSequenceFinished.RemoveDynamic(this, &ThisClass::HandleSequenceFinished);
 	}
 }
@@ -581,10 +662,33 @@ bool UAutoBattleSubsystem::QueryMatches(
 	return Query.IsEmpty() || Query.Matches(Tags);
 }
 
+void UAutoBattleSubsystem::HandleSequenceNodeStateChanged(
+	const FAbilitySequenceId SequenceId,
+	const FAbilitySequenceNode Node)
+{
+	if (SequenceId == BattleStartSequenceId
+		&& Node.NodeId == BattleStartRootNodeId
+		&& Node.State == EAbilitySequenceNodeState::Active)
+	{
+		CompleteBattleStartEvent();
+	}
+}
+
 void UAutoBattleSubsystem::HandleSequenceFinished(
 	const FAbilitySequenceId SequenceId,
 	const EAbilitySequenceState)
 {
+	if (SequenceId == BattleStartSequenceId)
+	{
+		BattleStartSequenceId = FAbilitySequenceId();
+		BattleStartRootNodeId = FAbilitySequenceNodeId();
+		if (IsBattleRunning() && BattleState == EAutoBattleState::Preparing)
+		{
+			BeginRound();
+		}
+		return;
+	}
+
 	if (BattleState == EAutoBattleState::WaitingForSequence && SequenceId == ActiveSequenceId)
 	{
 		CompleteCurrentTurn(true);

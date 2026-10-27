@@ -108,11 +108,16 @@ private:
 	bool HasPendingDeathAnimations() const;
 	bool TryFinishForTeamDefeat();
 	void FinishBattle(EAutoBattleResult Result, AZoneActor* WinningTeam, bool bBroadcast);
+	void StartBattleEvent();
+	void CompleteBattleStartEvent();
 	void BindSequenceEvents();
 	void UnbindSequenceEvents();
 	void BuildRoundParticipants();
 	int32 FindBaseOrder(const AUnitActor& Unit) const;
 	static bool QueryMatches(const FGameplayTagQuery& Query, const FGameplayTagContainer& Tags);
+
+	UFUNCTION()
+	void HandleSequenceNodeStateChanged(FAbilitySequenceId SequenceId, FAbilitySequenceNode Node);
 
 	UFUNCTION()
 	void HandleSequenceFinished(FAbilitySequenceId SequenceId, EAbilitySequenceState FinalState);
@@ -137,6 +142,8 @@ private:
 	TArray<TWeakObjectPtr<AUnitActor>> RoundParticipants;
 	TSet<TWeakObjectPtr<AUnitActor>> UnitsThatActed;
 	FRandomStream RandomStream;
+	FAbilitySequenceId BattleStartSequenceId;
+	FAbilitySequenceNodeId BattleStartRootNodeId;
 	FAbilitySequenceId ActiveSequenceId;
 	FTimerHandle AdvanceTimerHandle;
 	EAutoBattleState BattleState = EAutoBattleState::Inactive;

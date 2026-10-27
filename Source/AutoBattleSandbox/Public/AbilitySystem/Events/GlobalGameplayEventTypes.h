@@ -123,6 +123,20 @@ public:
 	EGlobalGameplayEventTeamRelationship Relationship = EGlobalGameplayEventTeamRelationship::Friendly;
 };
 
+/** Matches when the selected event participant owns the ability receiving the event. */
+USTRUCT(BlueprintType, meta = (DisplayName = "Self"))
+struct AUTOBATTLESANDBOX_API FGlobalGameplayEventSelfFilter : public FGlobalGameplayEventFilter
+{
+	GENERATED_BODY()
+
+public:
+	virtual bool Matches(const FGlobalGameplayEventFilterContext& Context) const override;
+
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Global Gameplay Event")
+	EGlobalGameplayEventParticipant Participant = EGlobalGameplayEventParticipant::Instigator;
+};
+
 USTRUCT(BlueprintType, meta = (Hidden))
 struct AUTOBATTLESANDBOX_API FGlobalGameplayEventTargetResolver
 {

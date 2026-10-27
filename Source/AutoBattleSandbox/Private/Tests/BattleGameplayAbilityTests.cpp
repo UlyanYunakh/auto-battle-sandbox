@@ -41,6 +41,19 @@ bool FBattleGameplayAbilityDefaultsTest::RunTest(const FString&)
 	EventData.Target = Target;
 	FGlobalGameplayEventFilterContext EventContext;
 	EventContext.EventData = &EventData;
+	EventContext.ListeningActor = Instigator;
+
+	FGlobalGameplayEventSelfFilter SelfFilter;
+	TestTrue(TEXT("The self filter matches when the event instigator owns the listening ability"),
+	         SelfFilter.Matches(EventContext));
+	SelfFilter.Participant = EGlobalGameplayEventParticipant::Target;
+	TestFalse(TEXT("The self filter rejects a different event target"),
+	          SelfFilter.Matches(EventContext));
+	EventContext.ListeningActor = Target;
+	TestTrue(TEXT("The self filter can match the event target"),
+	         SelfFilter.Matches(EventContext));
+	TestFalse(TEXT("The self filter rejects a missing event context"),
+	          SelfFilter.Matches(FGlobalGameplayEventFilterContext()));
 
 	FAbilityTargetSelectionInput TargetingInput;
 	TestTrue(TEXT("An unset resolver defaults to the event target"),

@@ -46,6 +46,14 @@ enum class EAbilityTargetTeamRelationship : uint8
 	Opposing
 };
 
+UENUM(BlueprintType)
+enum class EAbilityTargetAdjacentDirection : uint8
+{
+	Left,
+	Right,
+	Both
+};
+
 USTRUCT(BlueprintType)
 struct AUTOBATTLESANDBOX_API FAbilityTargetSelectionInput
 {
@@ -139,6 +147,32 @@ public:
 	EAbilityTargetTeamRelationship Relationship = EAbilityTargetTeamRelationship::Opposing;
 };
 
+USTRUCT(BlueprintType, meta = (DisplayName = "Self"))
+struct AUTOBATTLESANDBOX_API FAbilityTargetSelfCriterion : public FAbilityTargetCriterion
+{
+	GENERATED_BODY()
+
+public:
+	virtual bool IsTargetValid(
+		const FAbilityTargetingContext& Context,
+		const FAbilityTargetCandidate& Candidate) const override;
+};
+
+USTRUCT(BlueprintType, meta = (DisplayName = "Adjacent Unit"))
+struct AUTOBATTLESANDBOX_API FAbilityTargetAdjacentUnitCriterion : public FAbilityTargetCriterion
+{
+	GENERATED_BODY()
+
+public:
+	virtual bool IsTargetValid(
+		const FAbilityTargetingContext& Context,
+		const FAbilityTargetCandidate& Candidate) const override;
+
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ability Targeting")
+	EAbilityTargetAdjacentDirection Direction = EAbilityTargetAdjacentDirection::Both;
+};
+
 USTRUCT(BlueprintType, meta = (DisplayName = "Random"))
 struct AUTOBATTLESANDBOX_API FAbilityTargetRandomSelectionStrategy : public FAbilityTargetSelectionStrategy
 {
@@ -148,6 +182,17 @@ public:
 	virtual void OrderCandidates(
 		const FAbilityTargetingContext& Context,
 		TArray<FAbilityTargetCandidate>& Candidates) const override;
+};
+
+USTRUCT(BlueprintType, meta = (DisplayName = "Weakest"))
+struct AUTOBATTLESANDBOX_API FAbilityTargetWeakestSelectionStrategy : public FAbilityTargetSelectionStrategy
+{
+	GENERATED_BODY()
+
+public:
+	virtual float ScoreTarget(
+		const FAbilityTargetingContext& Context,
+		const FAbilityTargetCandidate& Candidate) const override;
 };
 
 USTRUCT(BlueprintType)

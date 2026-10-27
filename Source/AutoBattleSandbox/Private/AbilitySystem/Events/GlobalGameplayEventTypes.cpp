@@ -57,6 +57,19 @@ bool FGlobalGameplayEventTeamFilter::Matches(const FGlobalGameplayEventFilterCon
 		       : !bIsFriendly;
 }
 
+bool FGlobalGameplayEventSelfFilter::Matches(const FGlobalGameplayEventFilterContext& Context) const
+{
+	if (!IsValid(Context.ListeningActor) || !Context.EventData)
+	{
+		return false;
+	}
+
+	const AActor* ParticipantActor = Participant == EGlobalGameplayEventParticipant::Instigator
+		                                 ? Context.EventData->Instigator.Get()
+		                                 : Context.EventData->Target.Get();
+	return IsValid(ParticipantActor) && ParticipantActor == Context.ListeningActor;
+}
+
 bool FGlobalGameplayAbilityTrigger::IsValid() const
 {
 	return EventTag.IsValid() && AreFiltersValid() && IsTargetResolverValid();
