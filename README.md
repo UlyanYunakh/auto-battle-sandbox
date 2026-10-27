@@ -3,6 +3,8 @@
 Auto Battle Sandbox is an Unreal Engine 5.8 C++ project for experimenting with data-driven, ability-based automatic
 combat. It includes a simplified and adapted modular ability system based on another project I worked on.
 
+[![Auto Battle Sandbox video](https://img.youtube.com/vi/mTb4Dg8duf4/maxresdefault.jpg)](https://youtu.be/mTb4Dg8duf4)
+
 ## Included systems
 
 - Round- and turn-based auto-battle flow with configurable attack order, target priorities, and battle rules.
