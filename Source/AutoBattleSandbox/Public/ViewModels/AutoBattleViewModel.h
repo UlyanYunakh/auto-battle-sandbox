@@ -21,6 +21,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Auto Battle")
 	void CancelBattle();
 
+	UFUNCTION(BlueprintCallable, Category = "Auto Battle")
+	void ClearBattlefield();
+
 public:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Auto Battle")
 	bool bIsBattleRunning = false;

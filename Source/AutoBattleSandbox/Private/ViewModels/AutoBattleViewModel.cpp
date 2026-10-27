@@ -95,6 +95,62 @@ void UAutoBattleViewModel::CancelBattle()
 	RefreshBattleState();
 }
 
+void UAutoBattleViewModel::ClearBattlefield()
+{
+	UE_LOG(LogAutoBattleViewModel, Warning, TEXT("Battlefield clear requested."));
+
+	if (!BattleSubsystem)
+	{
+		UE_LOG(LogAutoBattleViewModel, Error,
+		       TEXT("Cannot clear battlefield: the auto battle subsystem is not available."));
+		RefreshBattleState();
+		return;
+	}
+
+	BattleSubsystem->CancelBattle();
+	UWorld* const BattleWorld = BattleSubsystem->GetWorld();
+	if (!BattleWorld)
+	{
+		UE_LOG(LogAutoBattleViewModel, Error,
+		       TEXT("Cannot clear battlefield: the auto battle subsystem has no world."));
+		RefreshBattleState();
+		return;
+	}
+
+	TArray<AUnitActor*> UnitsToDestroy;
+	for (TActorIterator<AUnitActor> UnitIterator(BattleWorld); UnitIterator; ++UnitIterator)
+	{
+		UnitsToDestroy.Add(*UnitIterator);
+	}
+
+	for (TActorIterator<AZoneActor> ZoneIterator(BattleWorld); ZoneIterator; ++ZoneIterator)
+	{
+		AZoneActor* Zone = *ZoneIterator;
+		Zone->SetBattleLocked(false);
+		Zone->ClearPreviewUnit();
+
+		const TArray<TObjectPtr<AUnitActor>> ZoneUnits = Zone->GetUnits();
+		for (AUnitActor* Unit : ZoneUnits)
+		{
+			Zone->RemoveUnit(Unit);
+		}
+	}
+
+	int32 DestroyedUnitCount = 0;
+	for (AUnitActor* Unit : UnitsToDestroy)
+	{
+		if (IsValid(Unit) && Unit->Destroy())
+		{
+			++DestroyedUnitCount;
+		}
+	}
+
+	UE_LOG(LogAutoBattleViewModel, Warning,
+	       TEXT("Battlefield cleared. Destroyed %d unit actors."),
+	       DestroyedUnitCount);
+	RefreshBattleState();
+}
+
 void UAutoBattleViewModel::ViewModelInitialize(AActor* InActor)
 {
 	Super::ViewModelInitialize(InActor);
